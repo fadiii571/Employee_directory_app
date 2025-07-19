@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "244649402555",
+    "project_id": "employee-directory-app-17382",
+    "storage_bucket": "employee-directory-app-17382.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:244649402555:android:8b8c0cc24b36e88031499e",
+        "android_client_info": {
+          "package_name": "com.example.student_projectry_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtZZ8TYGHS6jvmTAK7FiXEhNQhcujIdU8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
