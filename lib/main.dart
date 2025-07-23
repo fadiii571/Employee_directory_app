@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:student_projectry_app/homesc.dart';
-import 'package:student_projectry_app/splash.dart';
+import 'package:student_projectry_app/screens/homesc.dart';
+import 'package:student_projectry_app/screens/splash.dart';
 import 'firebase_options.dart';
 void main()async {
 WidgetsFlutterBinding.ensureInitialized();

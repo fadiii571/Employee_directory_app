@@ -1,5 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 Future<void> Addemployee({
   required String name,
@@ -7,15 +14,20 @@ Future<void> Addemployee({
   required String state,
   required String salary,
   required String section,
+  required String imageUrl,
   required BuildContext context,
 }) async {
-  try {
+  try { 
+
+
     await FirebaseFirestore.instance.collection("Employees").add({
       "name": name,
       "number": number,
       "state": state,
       "salary": salary,
       "section": section,
+      "image": imageUrl,
+
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -36,6 +48,47 @@ Future<void> Addemployee({
     ).showSnackBar(SnackBar(content: Text(e.toString())));
   }
 }
+Future<String?> uploadToCloudinary() async {
+  final cloudName = 'dzfr5nkxt';
+  final uploadPreset = 'employee_images';
+  final url = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+
+  Uint8List? imageBytes;
+  String fileName;
+
+  if (kIsWeb) {
+    final result = await FilePicker.platform.pickFiles(withData: true, type: FileType.image);
+    if (result == null || result.files.single.bytes == null) return null;
+    imageBytes = result.files.single.bytes!;
+    fileName = result.files.single.name;
+  } else {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return null;
+    imageBytes = await pickedFile.readAsBytes();
+    fileName = pickedFile.name;
+  }
+
+  final request = http.MultipartRequest('POST', url)
+    ..fields['upload_preset'] = uploadPreset
+    ..files.add(http.MultipartFile.fromBytes(
+      'file',
+      imageBytes,
+      filename: fileName,
+    ));
+
+  final response = await request.send();
+  final responseBody = await response.stream.bytesToString();
+
+  if (response.statusCode == 200) {
+    final data = json.decode(responseBody);
+    return data['secure_url'];
+  } else {
+    print("Upload failed: ${response.reasonPhrase}");
+    return null;
+  }
+}
+
 Stream<QuerySnapshot> getemployees(){
   return FirebaseFirestore.instance.collection("Employees").snapshots();
 }

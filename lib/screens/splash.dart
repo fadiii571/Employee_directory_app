@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:student_projectry_app/homesc.dart';
+import 'package:student_projectry_app/screens/homesc.dart';
 
 class Splashh extends StatefulWidget {
   const Splashh({super.key});
