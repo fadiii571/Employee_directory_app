@@ -474,6 +474,7 @@ class _HomeState extends State<Home> {
                     ),
 
                     SizedBox(height: 5),
+                    Text("Upload identity proof ↓ "),
                     CircleAvatar(
                       child: IconButton(
                         onPressed: () async {
