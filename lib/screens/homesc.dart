@@ -4,7 +4,7 @@ import 'package:student_projectry_app/screens/detail.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
 
 
-import 'package:student_projectry_app/services.dart';
+import 'package:student_projectry_app/Services/services.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
