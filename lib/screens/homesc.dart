@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:student_projectry_app/screens/detail.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
 
-
 import 'package:student_projectry_app/Services/services.dart';
 
 class Home extends StatefulWidget {
@@ -19,14 +18,21 @@ class _HomeState extends State<Home> {
   TextEditingController statecont = TextEditingController();
   TextEditingController salarycont = TextEditingController();
   TextEditingController sectioncont = TextEditingController();
- 
+  String? selectedSection;
+  void setSection(String? section) {
+    setState(() {
+      selectedSection = section;
+      Navigator.pop(context); // Close drawer
+    });
+  }
+
   void editbox(DocumentSnapshot doc) {
     namecont.text = doc['name'];
     numbercont.text = doc['number'];
     statecont.text = doc['state'];
     salarycont.text = doc['salary'];
     sectioncont.text = doc['section'];
-    
+
     showDialog(
       context: context,
       builder: (context) {
@@ -82,11 +88,37 @@ class _HomeState extends State<Home> {
                   ),
                 ),
               ),
-              SizedBox(height: 5),
-              TextField(
-                controller: sectioncont,
+              DropdownButtonFormField<String>(
+                value: selectedSection,
+                onChanged: (String? newValue) {
+                  setState(() {
+                    selectedSection = newValue;
+                    sectioncont.text = newValue ?? '';
+                  });
+                },
+                items:
+                    [
+                          'Admin office',
+                          'Anchor',
+                          'Fancy',
+                          'KK',
+                          'Soldering',
+                          'Wire',
+                          'Joint',
+                          'V chain',
+                          'Cutting',
+                          'Box chain',
+                          'Polish',
+                        ] // exclude 'All' if this is used for form entry
+                        .map(
+                          (section) => DropdownMenuItem<String>(
+                            value: section,
+                            child: Text(section),
+                          ),
+                        )
+                        .toList(),
                 decoration: InputDecoration(
-                  hintText: "Section",
+                  hintText: "Select Section",
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
@@ -94,7 +126,7 @@ class _HomeState extends State<Home> {
                   ),
                 ),
               ),
-              
+
               SizedBox(height: 10),
               ElevatedButton(
                 onPressed: () {
@@ -135,12 +167,194 @@ class _HomeState extends State<Home> {
         backgroundColor: Colors.lightBlue,
         foregroundColor: Colors.white,
       ),
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: Colors.lightBlue),
+              child: Text(
+                "Section",
+                style: TextStyle(color: Colors.black, fontSize: 20),
+              ),
+            ),
+            ListTile(
+              title: Text(
+                "All",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection(null),
+            ),
+            ListTile(
+              title: Text(
+                "Admin office",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Admin office"),
+            ),
+            ListTile(
+              title: Text(
+                "Anchor",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Anchor"),
+            ),
+            ListTile(
+              title: Text(
+                "Fancy",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Fancy"),
+            ),
+            ListTile(
+              title: Text(
+                "KK",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("KK"),
+            ),
+            ListTile(
+              title: Text(
+                "Soldering",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Soldering"),
+            ),
+            ListTile(
+              title: Text(
+                "Wire",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Wire"),
+            ),
+            ListTile(
+              title: Text(
+                "Joint",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Joint"),
+            ),
+            ListTile(
+              title: Text(
+                "V chain",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("V chain"),
+            ),
+            ListTile(
+              title: Text(
+                "Cutting",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Cutting"),
+            ),
+            ListTile(
+              title: Text(
+                "Box chain",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Box chain"),
+            ),
+            ListTile(
+              title: Text(
+                "Polish",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              onTap: () => setSection("Polish"),
+            ),
+          ],
+        ),
+      ),
+
+      body: Container(
+        padding: EdgeInsets.all(10),
+        margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: StreamBuilder(
+          stream: getEmployees(section: selectedSection),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return Center(child: CircularProgressIndicator());
+            }
+            final docs = snapshot.data!.docs;
+
+            return ListView.builder(
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                Employee emp = Employee.fromMap(
+                  docs[index].data() as Map<String, dynamic>,
+                );
+
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EmployeeDetailPage(employee: emp),
+                      ),
+                    );
+                  },
+                  child: Card(
+                    margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundImage: NetworkImage(emp.profileImageUrl),),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              editbox(docs[index]);
+                            },
+                            icon: Icon(Icons.edit),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              deletemp(docs[index].id);
+                            },
+                            icon: Icon(Icons.delete),
+                          ),
+                        ],
+                      ),
+                      title: Text(
+                        "${emp.name}",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Contact-${emp.number}",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           showDialog(
             context: context,
             builder: (context) {
-               String? imageUrl;
+              String? imageUrl;
+              String? profileimageUrl;
               return AlertDialog(
                 title: Text(
                   "Add employee details",
@@ -153,6 +367,24 @@ class _HomeState extends State<Home> {
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    CircleAvatar(
+                      child: IconButton(
+                        onPressed: () async {
+                          final uploaded = await uploadToCloudinary();
+                          if (uploaded != null) {
+                            profileimageUrl = uploaded;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Image uploaded")),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Failed to upload image")),
+                            );
+                          }
+                        
+                      }, icon: Icon(Icons.camera_alt)),
+                    ),
+                    SizedBox(height: 10,),
                     TextField(
                       controller: namecont,
                       decoration: InputDecoration(
@@ -201,10 +433,38 @@ class _HomeState extends State<Home> {
                       ),
                     ),
                     SizedBox(height: 5),
-                    TextField(
-                      controller: sectioncont,
+
+                    DropdownButtonFormField<String>(
+                      value: selectedSection,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          selectedSection = newValue;
+                          sectioncont.text = newValue ?? '';
+                        });
+                      },
+                      items:
+                          [
+                                'Admin office',
+                                'Anchor',
+                                'Fancy',
+                                'KK',
+                                'Soldering',
+                                'Wire',
+                                'Joint',
+                                'V chain',
+                                'Cutting',
+                                'Box chain',
+                                'Polish',
+                              ] // exclude 'All' if this is used for form entry
+                              .map(
+                                (section) => DropdownMenuItem<String>(
+                                  value: section,
+                                  child: Text(section),
+                                ),
+                              )
+                              .toList(),
                       decoration: InputDecoration(
-                        hintText: "Section",
+                        hintText: "Select Section",
                         filled: true,
                         fillColor: Colors.white,
                         border: OutlineInputBorder(
@@ -212,6 +472,7 @@ class _HomeState extends State<Home> {
                         ),
                       ),
                     ),
+
                     SizedBox(height: 5),
                     CircleAvatar(
                       child: IconButton(
@@ -244,7 +505,8 @@ class _HomeState extends State<Home> {
                             salary: salarycont.text,
                             section: sectioncont.text,
                             context: context,
-                            imageUrl: imageUrl??""
+                            imageUrl: imageUrl ?? "",
+                            profileimageUrl: profileimageUrl ?? "",
                           );
                         },
                         child: Text(
@@ -269,83 +531,6 @@ class _HomeState extends State<Home> {
         child: Icon(Icons.add),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-      ),
-      body: Container(
-        padding: EdgeInsets.all(10),
-        margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: StreamBuilder(
-          stream: getemployees(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return Center(child: CircularProgressIndicator());
-            }
-            final docs = snapshot.data!.docs;
-           
-            return ListView.builder(
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                Employee emp = Employee.fromMap(docs[index].data() as Map<String, dynamic>);
-
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => EmployeeDetailPage(employee: emp),));
-                  },
-                  child: Card(
-                    margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () {
-                              editbox(docs[index]);
-                            },
-                            icon: Icon(Icons.edit),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              deletemp(docs[index].id);
-                            },
-                            icon: Icon(Icons.delete),
-                          ),
-                        ],
-                      ),
-                      title: Text(
-                        "${emp.name}",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Contact-${emp.number}",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                         
-                          
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
       ),
     );
   }

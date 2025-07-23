@@ -14,6 +14,7 @@ Future<void> Addemployee({
   required String state,
   required String salary,
   required String section,
+  required String profileimageUrl,
   required String imageUrl,
   required BuildContext context,
 }) async {
@@ -27,7 +28,7 @@ Future<void> Addemployee({
       "salary": salary,
       "section": section,
       "image": imageUrl,
-
+      "profileimage": profileimageUrl,
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -89,9 +90,13 @@ Future<String?> uploadToCloudinary() async {
   }
 }
 
-Stream<QuerySnapshot> getemployees(){
-  return FirebaseFirestore.instance.collection("Employees").snapshots();
-}
+ Stream<QuerySnapshot> getEmployees({String? section}) {
+    if (section == null) {
+      return FirebaseFirestore.instance.collection("Employees").snapshots();
+    } else {
+      return FirebaseFirestore.instance.collection("Employees").where("section", isEqualTo: section).snapshots();
+    }
+  }
 Future<void> deletemp(String id)async{
   await FirebaseFirestore.instance.collection("Employees").doc(id).delete();
 }

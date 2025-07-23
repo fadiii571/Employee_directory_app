@@ -5,6 +5,7 @@ class Employee {
   final String salary;
   final String section;
   final String imageUrl;
+  final String profileImageUrl;
 
   Employee({
     required this.name,
@@ -13,6 +14,7 @@ class Employee {
     required this.salary,
     required this.section,
     required this.imageUrl,
+    required this.profileImageUrl,
   });
 
   factory Employee.fromMap(Map<String, dynamic> data) {
@@ -23,6 +25,7 @@ class Employee {
       salary: data['salary']?.toString() ?? '',
       section: data['section'] ?? '',
       imageUrl: data['image'] ?? '',
+      profileImageUrl: data['profileimage'] ?? '',
     );
   }
 }
