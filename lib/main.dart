@@ -4,7 +4,7 @@ import 'package:student_projectry_app/homesc.dart';
 import 'package:student_projectry_app/splash.dart';
 import 'firebase_options.dart';
 void main()async {
-
+WidgetsFlutterBinding.ensureInitialized();
 
 await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
@@ -20,17 +20,15 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-      theme: ThemeData( textTheme: TextTheme(
-      titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
-      bodyMedium: TextStyle(fontSize: 17, color: Colors.black),
-      bodySmall: TextStyle(fontSize: 14, color: Colors.black),
+      theme: ThemeData( 
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
     ),
 
         
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      
+      
       debugShowCheckedModeBanner: false,
-      home: Splashh(),
+      home: Splashh()
     );
   }
 }
