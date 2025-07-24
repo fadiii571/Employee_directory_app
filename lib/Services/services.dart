@@ -16,6 +16,9 @@ Future<void> Addemployee({
   required String section,
   required String profileimageUrl,
   required String imageUrl,
+  required String location,
+  required double latitude,
+  required double longitude,
   required BuildContext context,
 }) async {
   try { 
@@ -29,6 +32,9 @@ Future<void> Addemployee({
       "section": section,
       "image": imageUrl,
       "profileimage": profileimageUrl,
+      "location": location,
+      "latitude": latitude, 
+      "longitude": longitude,
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -107,6 +113,9 @@ Future<void> updateemployee({
   required String state,
   required String salary,
   required String section,
+  required String location,
+  required double latitude,
+  required double longitude,
   required BuildContext context,
 }) async {
   try {
@@ -116,6 +125,8 @@ Future<void> updateemployee({
       "state": state,
       "salary": salary,
       "section": section,
+      "location": location,
+      "latitude": latitude, 
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(

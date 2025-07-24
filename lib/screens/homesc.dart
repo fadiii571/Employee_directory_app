@@ -18,6 +18,9 @@ class _HomeState extends State<Home> {
   TextEditingController statecont = TextEditingController();
   TextEditingController salarycont = TextEditingController();
   TextEditingController sectioncont = TextEditingController();
+  TextEditingController locationcont = TextEditingController();
+  TextEditingController latitudecont = TextEditingController();
+  TextEditingController longitudecont = TextEditingController();
   String? selectedSection;
   void setSection(String? section) {
     setState(() {
@@ -126,6 +129,52 @@ class _HomeState extends State<Home> {
                   ),
                 ),
               ),
+              SizedBox(height: 5,),
+              TextField(
+                      controller: locationcont,
+                      decoration: InputDecoration(
+                        hintText: "Home Address",
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.black),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: latitudecont,
+                            decoration: InputDecoration(
+                              hintText: "Latitude",
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.black),
+                              ),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        SizedBox(width: 5),
+                        Expanded(
+                          child: TextField(
+                            controller: longitudecont,
+                            decoration: InputDecoration(
+                              hintText: "Longitude",
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.black),
+                              ),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
 
               SizedBox(height: 10),
               ElevatedButton(
@@ -137,6 +186,9 @@ class _HomeState extends State<Home> {
                     state: statecont.text,
                     salary: salarycont.text,
                     section: sectioncont.text,
+                    location: locationcont.text,
+                    latitude: double.tryParse(latitudecont.text) ?? 0.0, 
+                    longitude: double.tryParse(longitudecont.text) ?? 0.0,
                     context: context,
                   );
                 },
@@ -303,7 +355,9 @@ class _HomeState extends State<Home> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: ListTile(
-                      leading: CircleAvatar(backgroundImage: NetworkImage(emp.profileImageUrl),),
+                      leading: CircleAvatar(
+                        backgroundImage: NetworkImage(emp.profileImageUrl),
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -381,10 +435,11 @@ class _HomeState extends State<Home> {
                               SnackBar(content: Text("Failed to upload image")),
                             );
                           }
-                        
-                      }, icon: Icon(Icons.camera_alt)),
+                        },
+                        icon: Icon(Icons.camera_alt),
+                      ),
                     ),
-                    SizedBox(height: 10,),
+                    SizedBox(height: 10),
                     TextField(
                       controller: namecont,
                       decoration: InputDecoration(
@@ -473,7 +528,54 @@ class _HomeState extends State<Home> {
                       ),
                     ),
 
+                    TextField(
+                      controller: locationcont,
+                      decoration: InputDecoration(
+                        hintText: "Home Address",
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.black),
+                        ),
+                      ),
+                    ),
                     SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: latitudecont,
+                            decoration: InputDecoration(
+                              hintText: "Latitude",
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.black),
+                              ),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        SizedBox(width: 5),
+                        Expanded(
+                          child: TextField(
+                            controller: longitudecont,
+                            decoration: InputDecoration(
+                              hintText: "Longitude",
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.black),
+                              ),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // ...existing code...
+                    SizedBox(height: 5),
+
                     Text("Upload identity proof ↓ "),
                     CircleAvatar(
                       child: IconButton(
@@ -508,6 +610,10 @@ class _HomeState extends State<Home> {
                             context: context,
                             imageUrl: imageUrl ?? "",
                             profileimageUrl: profileimageUrl ?? "",
+                            location: locationcont.text,
+                            latitude: double.tryParse(latitudecont.text) ?? 0.0,
+                            longitude:
+                                double.tryParse(longitudecont.text) ?? 0.0,
                           );
                         },
                         child: Text(

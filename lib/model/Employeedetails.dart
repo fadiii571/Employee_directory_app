@@ -6,6 +6,9 @@ class Employee {
   final String section;
   final String imageUrl;
   final String profileImageUrl;
+  final String location;
+  final double latitude;
+  final double longitude;
 
   Employee({
     required this.name,
@@ -15,6 +18,9 @@ class Employee {
     required this.section,
     required this.imageUrl,
     required this.profileImageUrl,
+    required this.location,
+    required this.latitude,
+    required this.longitude,
   });
 
   factory Employee.fromMap(Map<String, dynamic> data) {
@@ -26,6 +32,9 @@ class Employee {
       section: data['section'] ?? '',
       imageUrl: data['image'] ?? '',
       profileImageUrl: data['profileimage'] ?? '',
+      location: data['location'] ?? '',
+      latitude: data['latitude']?.toDouble() ?? 0.0,
+      longitude: data['longitude']?.toDouble() ?? 0.0,
     );
   }
 }
