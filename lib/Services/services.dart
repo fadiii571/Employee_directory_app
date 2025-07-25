@@ -116,6 +116,7 @@ Future<void> updateemployee({
   required String location,
   required double latitude,
   required double longitude,
+  required bool isActive,
   required BuildContext context,
 }) async {
   try {
@@ -127,6 +128,7 @@ Future<void> updateemployee({
       "section": section,
       "location": location,
       "latitude": latitude, 
+      'status': isActive,
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
