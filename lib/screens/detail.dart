@@ -46,67 +46,89 @@ class EmployeeDetailPage extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(employee.name)),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(title: Text(employee.name)),
+    body: SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 50,
+              backgroundImage: NetworkImage(employee.profileImageUrl),
+            ),
+            SizedBox(height: 15),
+            _infoCard("Contact", [
+              _infoRow("Contact", employee.number, icon: Icons.phone),
+            ]),
+            _infoCard("State", [
+              _infoRow("State", employee.state, icon: Icons.location_on),
+            ]),
+            _infoCard("Section", [
+              _infoRow("Section", employee.section, icon: Icons.badge),
+            ]),
+            _infoCard("Salary", [
+              _infoRow("Salary", "₹${employee.salary}", icon: Icons.attach_money),
+            ]),
+            _infoCard("Address", [
+              _infoRow("Address", employee.location, icon: Icons.home),
+              SizedBox(height: 10),
               GestureDetector(
+                onTap: () {
+                  final url =
+                      'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
+                  launchUrl(Uri.parse(url));
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.map, size: 20, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text(
+                      "View on Map",
+                      style: TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ]),
+            // Bottom Image Card
+            Card(
+              margin: const EdgeInsets.only(top: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 4,
+              clipBehavior: Clip.antiAlias,
+              child: GestureDetector(
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder:
-                          (context) =>
-                              Imageviewesc(imageUrl: employee.imageUrl),
+                      builder: (context) => Imageviewesc(imageUrl: employee.imageUrl),
                     ),
                   );
                 },
                 child: Hero(
                   tag: employee.imageUrl,
-
                   child: Image.network(
                     employee.imageUrl,
                     height: 200,
+                    width: double.infinity,
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
-              SizedBox(height: 5,),
-              _infoCard("Employee Info", [
-                _infoRow("Contact", employee.number, icon: Icons.phone),
-                _infoRow("State", employee.state, icon: Icons.location_on),
-                _infoRow("Section", employee.section, icon: Icons.badge),
-                _infoRow(
-                  "Salary",
-                  "₹${employee.salary}",
-                  icon: Icons.attach_money,
-                ),
-                _infoRow("Address", employee.location, icon: Icons.home),
-               
-                
-                GestureDetector(
-                  onTap: () {
-                    final url = 'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
-        launchUrl(Uri.parse(url));
-                  },
-                  child: Text("View on Map",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline,
-                      fontSize: 18,
-                    )),
-                )
-              ]),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
-}
+    ),
+  );
+}}

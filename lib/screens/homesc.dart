@@ -268,9 +268,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: NetworkImage(emp.profileImageUrl),
-                        ),
+                        
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -293,7 +291,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          "Contact - ${emp.number}",
+                          "section - ${emp.section}\n",
                           
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
@@ -432,7 +430,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                           ),
                         ),
                       ),
-      
+                       SizedBox(height: 5),
                       TextField(
                         controller: locationcont,
                         decoration: InputDecoration(
