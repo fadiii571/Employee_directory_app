@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:student_projectry_app/attendence/attendencehistoryscreen.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
 import 'package:student_projectry_app/Services/services.dart';
+import 'package:student_projectry_app/attendence/Markattendencescreen.dart';
 
 import 'package:student_projectry_app/screens/detail.dart';
 
@@ -223,6 +225,48 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
             ),
           ],
         ),
+        drawer: Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          const DrawerHeader(
+            decoration: BoxDecoration(color: Colors.lightBlue),
+            child: Text("Menu", style: TextStyle(color: Colors.white, fontSize: 24)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Employees'),
+            onTap: () {
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.check_circle_outline),
+            title: const Text('Mark Attendance'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const MarkAttendanceScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+        leading: Icon(Icons.history),
+        title: Text('Attendance History'),
+        onTap: () {
+          Navigator.pop(context); // Close the drawer
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => AttendanceHistoryScreen()),
+          );
+        },
+      ),
+        ],
+      ),
+    ),
         body: Container(
           padding: EdgeInsets.all(10),
           margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
