@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:student_projectry_app/Services/services.dart';
 import 'package:student_projectry_app/widgets/empattendencehis.dart';
 
-class AttendanceHistoryScreen extends StatefulWidget {
-  const AttendanceHistoryScreen({super.key});
+class QRDailyAttendanceHistoryScreen extends StatefulWidget {
+  const QRDailyAttendanceHistoryScreen({super.key});
 
   @override
-  State<AttendanceHistoryScreen> createState() => _AttendanceHistoryScreenState();
+  State<QRDailyAttendanceHistoryScreen> createState() => _QRDailyAttendanceHistoryScreenState();
 }
 
-class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
+class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistoryScreen> {
   DateTime selectedDate = DateTime.now();
 
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -22,15 +23,16 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
     );
-    if (picked != null) {
+
+    if (picked != null && picked != selectedDate) {
       setState(() => selectedDate = picked);
     }
   }
 
-  Stream<QuerySnapshot> getAttendanceForDate(String date) {
+  Stream<QuerySnapshot> getQRDailyAttendanceStream() {
     return FirebaseFirestore.instance
         .collection('attendance')
-        .doc(date)
+        .doc(formattedDate)
         .collection('records')
         .snapshots();
   }
@@ -39,18 +41,18 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendance History'),
+        title: const Text('QR Attendance - Daily History'),
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: () => pickDate(context),
             tooltip: 'Pick Date',
           ),
-        IconButton(
+          IconButton(
   icon: const Icon(Icons.picture_as_pdf),
   onPressed: () async {
-    final snapshot = await getAttendanceForDate(formattedDate).first;
-    await generateAttendancePdf(snapshot.docs, formattedDate);
+    final snapshot = await getQRDailyAttendance(date: formattedDate);
+    await generateAttendancePdf(snapshot, formattedDate);
   },
   tooltip: 'Export to PDF',
 )
@@ -60,17 +62,17 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
-                const Text('Selected Date: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text("Selected Date: ", style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(formattedDate),
               ],
             ),
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: getAttendanceForDate(formattedDate),
+              stream: getQRDailyAttendanceStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -79,15 +81,19 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                 final docs = snapshot.data?.docs ?? [];
 
                 if (docs.isEmpty) {
-                  return const Center(child: Text("No attendance data for this date."));
+                  return const Center(child: Text("No QR attendance found for this date."));
                 }
 
                 return ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
                     final data = docs[index].data() as Map<String, dynamic>;
+
                     return ListTile(
-                      leading: CircleAvatar(child: Text(data['name'][0])),
+                      leading: CircleAvatar(
+                        backgroundImage: NetworkImage(data['profileImageUrl'] ?? ''),
+                        child: (data['profileImageUrl'] == null) ? Text(data['name'][0]) : null,
+                      ),
                       title: Text(data['name']),
                       subtitle: Text("Status: ${data['status']}"),
                     );

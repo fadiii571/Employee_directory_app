@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:student_projectry_app/attendence/attendencehistoryscreen.dart';
+import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.dart';
+
 import 'package:student_projectry_app/model/Employeedetails.dart';
 import 'package:student_projectry_app/Services/services.dart';
-import 'package:student_projectry_app/attendence/Markattendencescreen.dart';
+import 'package:student_projectry_app/attendence/qrattendancescreen.dart';
 
 import 'package:student_projectry_app/screens/detail.dart';
 
@@ -248,7 +249,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const MarkAttendanceScreen(),
+                  builder: (_) => QRAttendanceScreen(),
                 ),
               );
             },
@@ -257,11 +258,13 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
         leading: Icon(Icons.history),
         title: Text('Attendance History'),
         onTap: () {
-          Navigator.pop(context); // Close the drawer
           Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => AttendanceHistoryScreen()),
-          );
+  context,
+  MaterialPageRoute(
+    builder: (context) =>QRDailyAttendanceHistoryScreen(),
+  ),
+);
+
         },
       ),
         ],

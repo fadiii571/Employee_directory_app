@@ -155,48 +155,39 @@ Future<void> markAttendanceByAdmin({
   required String employeeId,
   required String name,
   required String status,
-  required String date, // in yyyy-MM-dd format
+  required String date,
 }) async {
-  try {
-    await FirebaseFirestore.instance
-        .collection('attendance')
-        .doc(date)
-        .collection('records')
-        .doc(employeeId)
-        .set({
-      'employeeId': employeeId,
-      'name': name,
-      'status': status,
-      'markedBy': 'admin',
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-  } catch (e) {
-    print("Error marking attendance: $e");
-  }
+  final now = DateTime.now();
+  final attendanceRef = FirebaseFirestore.instance
+      .collection('attendance')
+      .doc(employeeId)
+      .collection('records')
+      .doc(date);
+
+  await attendanceRef.set({
+    'employeeId': employeeId,
+    'name': name,
+    'status': status,
+    'timestamp': now,
+    'markedBy': 'qr',
+  });
 }
 
-Future<List<Map<String, dynamic>>> getAttendanceHistory({
-  required String employeeId,
-  String? date, 
+
+Future<List<Map<String, dynamic>>> getQRDailyAttendance({
+  required String date,
 }) async {
-  final attendanceRef = FirebaseFirestore.instance.collection('attendance');
+  final attendanceRef = FirebaseFirestore.instance
+      .collection('attendance')
+      .doc(date)
+      .collection('records');
 
-  List<Map<String, dynamic>> history = [];
+  final snapshot = await attendanceRef.get();
 
-  if (date != null) {
-    final doc = await attendanceRef.doc(date).collection('records').doc(employeeId).get();
-    if (doc.exists) {
-      history.add(doc.data()!..['date'] = date);
-    }
-  } else {
-    final datesSnapshot = await attendanceRef.get();
-    for (final dateDoc in datesSnapshot.docs) {
-      final recordSnapshot = await dateDoc.reference.collection('records').doc(employeeId).get();
-      if (recordSnapshot.exists) {
-        history.add(recordSnapshot.data()!..['date'] = dateDoc.id);
-      }
-    }
-  }
-
-  return history;
+  return snapshot.docs.map((doc) {
+    final data = doc.data();
+    data['id'] = doc.id;
+    data['date'] = date;
+    return data;
+  }).toList();
 }

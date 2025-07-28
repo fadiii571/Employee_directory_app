@@ -1,0 +1,52 @@
+// employee_selector_for_history.dart
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+//import 'package:student_projectry_app/attendence/employeeattendanceHistoryScreen.dart';
+
+class EmployeeSelectorForHistory extends StatelessWidget {
+  const EmployeeSelectorForHistory({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Select Employee"),
+        backgroundColor: Colors.lightBlue,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('employees').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+
+          final docs = snapshot.data!.docs;
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final id = docs[index].id;
+              final name = data['name'] ?? 'Unnamed';
+
+              return ListTile(
+                title: Text(name),
+                subtitle: Text("Tap to view attendance history"),
+                trailing: Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EmployeeAttendanceHistoryScreen(
+                        employeeId: id,
+                        employeeName: name,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
