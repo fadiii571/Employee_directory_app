@@ -7,6 +7,7 @@ import 'package:student_projectry_app/Services/services.dart';
 import 'package:student_projectry_app/attendence/qrattendancescreen.dart';
 
 import 'package:student_projectry_app/screens/detail.dart';
+import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -331,6 +332,9 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                               },
                               icon: Icon(Icons.delete),
                             ),
+                            IconButton(onPressed: (){
+                              showDialog(context: context, builder: (context) => EmployeeQRCode(employeeId: docs[index].id, employeeName: emp.name),);
+                            }, icon: Icon(Icons.qr_code))
                           ],
                         ),
                         title: Text(

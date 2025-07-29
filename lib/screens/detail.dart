@@ -98,7 +98,7 @@ Widget build(BuildContext context) {
                 ),
               ),
             ]),
-            // Bottom Image Card
+            
             Card(
               margin: const EdgeInsets.only(top: 16),
               shape: RoundedRectangleBorder(
