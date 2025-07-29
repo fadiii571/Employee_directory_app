@@ -49,7 +49,8 @@ class EmployeeDetailPage extends StatelessWidget {
  @override
 Widget build(BuildContext context) {
   return Scaffold(
-    appBar: AppBar(title: Text(employee.name)),
+    appBar: AppBar(title: Text(employee.name)
+    ),
     body: SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

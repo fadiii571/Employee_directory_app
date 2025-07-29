@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:student_projectry_app/Services/services.dart';
-import 'package:student_projectry_app/widgets/empattendencehis.dart';
 
-class QRDailyAttendanceHistoryScreen extends StatefulWidget {
-  const QRDailyAttendanceHistoryScreen({super.key});
+class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
+  const EmployeeQRDailyLogHistoryScreen({super.key});
 
   @override
-  State<QRDailyAttendanceHistoryScreen> createState() => _QRDailyAttendanceHistoryScreenState();
+  State<EmployeeQRDailyLogHistoryScreen> createState() => _EmployeeQRDailyLogHistoryScreenState();
 }
 
-class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistoryScreen> {
+class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHistoryScreen> {
   DateTime selectedDate = DateTime.now();
 
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -29,7 +27,7 @@ class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistor
     }
   }
 
-  Stream<QuerySnapshot> getQRDailyAttendanceStream() {
+  Stream<QuerySnapshot> getAttendanceStream() {
     return FirebaseFirestore.instance
         .collection('attendance')
         .doc(formattedDate)
@@ -37,26 +35,42 @@ class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistor
         .snapshots();
   }
 
+  Widget buildLogList(List logs) {
+    if (logs.isEmpty) {
+      return const Text("No logs");
+    }
+
+    logs.sort((a, b) {
+      final timeA = DateFormat('hh:mm a').parse(a['time']);
+      final timeB = DateFormat('hh:mm a').parse(b['time']);
+      return timeA.compareTo(timeB);
+    });
+
+    final inLogs = logs.where((log) => log['type'] == 'In').map((log) => log['time']).toList();
+    final outLogs = logs.where((log) => log['type'] == 'Out').map((log) => log['time']).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (inLogs.isNotEmpty)
+          Text("In: ${inLogs.join(', ')}", style: const TextStyle(color: Colors.green)),
+        if (outLogs.isNotEmpty)
+          Text("Out: ${outLogs.join(', ')}", style: const TextStyle(color: Colors.red)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QR Attendance - Daily History'),
+        title: const Text('Employee QR Attendance Logs'),
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: () => pickDate(context),
             tooltip: 'Pick Date',
           ),
-          IconButton(
-  icon: const Icon(Icons.picture_as_pdf),
-  onPressed: () async {
-    final snapshot = await getQRDailyAttendance(date: formattedDate);
-    await generateAttendancePdf(snapshot, formattedDate);
-  },
-  tooltip: 'Export to PDF',
-)
-
         ],
       ),
       body: Column(
@@ -72,7 +86,7 @@ class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistor
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: getQRDailyAttendanceStream(),
+              stream: getAttendanceStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -81,21 +95,29 @@ class _QRDailyAttendanceHistoryScreenState extends State<QRDailyAttendanceHistor
                 final docs = snapshot.data?.docs ?? [];
 
                 if (docs.isEmpty) {
-                  return const Center(child: Text("No QR attendance found for this date."));
+                  return const Center(child: Text("No attendance data found for this date."));
                 }
 
-                return ListView.builder(
+                return ListView.separated(
                   itemCount: docs.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final data = docs[index].data() as Map<String, dynamic>;
+                    final name = data['name'] ?? 'Unknown';
+                    final imageUrl = data['profileImageUrl'];
+                    final logs = data['logs'] ?? [];
 
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundImage: NetworkImage(data['profileImageUrl'] ?? ''),
-                        child: (data['profileImageUrl'] == null) ? Text(data['name'][0]) : null,
+                        backgroundImage: imageUrl != null && imageUrl.isNotEmpty
+                            ? NetworkImage(imageUrl)
+                            : null,
+                        child: (imageUrl == null || imageUrl.isEmpty)
+                            ? Text(name.isNotEmpty ? name[0] : '?')
+                            : null,
                       ),
-                      title: Text(data['name']),
-                      subtitle: Text("Status: ${data['status']}"),
+                      title: Text(name),
+                      subtitle: buildLogList(List<Map<String, dynamic>>.from(logs)),
                     );
                   },
                 );

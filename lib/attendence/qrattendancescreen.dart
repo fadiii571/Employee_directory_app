@@ -1,74 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:student_projectry_app/Services/services.dart';
+import 'package:intl/intl.dart';
 
-class QRAttendanceScreen extends StatefulWidget {
-  const QRAttendanceScreen({super.key});
+class QRScanAttendanceScreen extends StatefulWidget {
+  const QRScanAttendanceScreen({super.key});
 
   @override
-  State<QRAttendanceScreen> createState() => _QRAttendanceScreenState();
+  State<QRScanAttendanceScreen> createState() => _QRScanAttendanceScreenState();
 }
 
-class _QRAttendanceScreenState extends State<QRAttendanceScreen> {
-  bool hasScanned = false;
-  Map<String, dynamic>? scannedEmployee;
-
-  final MobileScannerController _controller = MobileScannerController(); // ✅ single controller
-
-  String get formattedDate => DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-  Future<void> handleScan(String employeeId) async {
-    if (hasScanned) return;
-
-    setState(() => hasScanned = true);
-
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('Employees')
-          .doc(employeeId)
-          .get();
-
-      if (!doc.exists) {
-        _showMessage("Employee not found.");
-        return;
-      }
-
-      final data = doc.data()!;
-      setState(() {
-        scannedEmployee = {
-          'id': doc.id,
-          'name': data['name'],
-          'profileImageUrl': data['profileimage'],
-        };
-      });
-
-      await markAttendanceByAdmin(
-        employeeId: doc.id,
-        name: data['name'],
-        status: 'Present',
-        date: formattedDate,
-      );
-
-      _showMessage("Attendance marked for ${data['name']}");
-
-      await Future.delayed(const Duration(seconds: 2));
-      setState(() {
-        hasScanned = false;
-        scannedEmployee = null;
-      });
-
-    } catch (e) {
-      _showMessage("Error: ${e.toString()}");
-    }
-  }
-
-  void _showMessage(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
-  }
+class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreen> {
+  final MobileScannerController _controller = MobileScannerController();
+  bool isScanned = false;
+  String selectedType = 'In'; // Default type
 
   @override
   void dispose() {
@@ -76,71 +21,146 @@ class _QRAttendanceScreenState extends State<QRAttendanceScreen> {
     super.dispose();
   }
 
+  void showResult(String message, {bool success = true}) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(success ? 'Success' : 'Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              setState(() => isScanned = false); // Allow scanning again
+            },
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> handleScan(String employeeId) async {
+  if (isScanned) return;
+  setState(() => isScanned = true);
+
+  final now = DateTime.now();
+  final date = DateFormat('yyyy-MM-dd').format(now);
+  final time = DateFormat('hh:mm a').format(now);
+
+  try {
+    final empDoc = await FirebaseFirestore.instance
+        .collection('Employees')
+        .doc(employeeId)
+        .get();
+
+    if (!empDoc.exists) {
+      showResult("Invalid QR - Employee not found", success: false);
+      return;
+    }
+
+    final empData = empDoc.data()!;
+    final recordRef = FirebaseFirestore.instance
+        .collection('attendance')
+        .doc(date)
+        .collection('records')
+        .doc(employeeId);
+
+    final snapshot = await recordRef.get();
+
+    if (snapshot.exists) {
+      final existingData = snapshot.data()!;
+      final List<dynamic> logs = existingData['logs'] ?? [];
+
+      final alreadyMarked = logs.any((log) => log['type'] == selectedType);
+      if (alreadyMarked) {
+        throw Exception("Already marked $selectedType today.");
+      }
+
+      await recordRef.update({
+        'logs': FieldValue.arrayUnion([
+          {'time': time, 'type': selectedType}
+        ])
+      });
+    } else {
+      await recordRef.set({
+        'name': empData['name'],
+        'id': employeeId,
+        'profileImageUrl': empData['profileImageUrl'],
+        'logs': [
+          {'time': time, 'type': selectedType}
+        ]
+      });
+    }
+
+    showResult("Marked $selectedType for ${empData['name']} at $time", success: true);
+  } catch (e) {
+    showResult("Error: $e", success: false);
+  }
+}
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("QR Attendance Scanner"),
+        title: const Text("QR Code Attendance"),
         backgroundColor: Colors.blue,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.flash_on),
-            onPressed: () {
-              _controller.toggleTorch();
-            },
-          ),
-        ],
+        foregroundColor: Colors.white,
       ),
-      body: Stack(
+      body: Column(
         children: [
-          MobileScanner(
-            
-            controller: _controller,
-            onDetect: (BarcodeCapture capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              for (final barcode in barcodes) {
-                final code = barcode.rawValue;
-                if (code != null) {
-                  handleScan(code);
-                }
-              }
-              
-              
-                
-              
-            },
+          const SizedBox(height: 10),
+          Text(
+            "Select Attendance Type",
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          if (scannedEmployee != null)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                margin: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black26)],
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: ['In', 'Out'].map((type) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: ChoiceChip(
+                  label: Text(type),
+                  selected: selectedType == type,
+                  onSelected: (_) {
+                    setState(() {
+                      selectedType = type;
+                    });
+                  },
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage:
-                          NetworkImage(scannedEmployee!['profileImageUrl']),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      scannedEmployee!['name'],
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text("Attendance marked successfully!",
-                        style: TextStyle(color: Colors.green)),
-                  ],
-                ),
-              ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+          const Divider(),
+          const Text("Scan Employee QR Code Below"),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Stack(
+              children: [
+                MobileScanner(
+                  controller: _controller,
+                  
+                  onDetect: (BarcodeCapture capture) {
+                    final List<Barcode> Barcodes=capture.barcodes;
+                    for(final barcode in Barcodes){
+                      final String? code = barcode.rawValue;
+                      if(code != null && !isScanned) {
+                        handleScan(code);
+                        break;
+                      }
+                    }
+                    
+                     {
+                      
+                    
+                  }
+  }),
+              ],
             ),
+          ),
         ],
       ),
     );

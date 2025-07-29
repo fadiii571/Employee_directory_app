@@ -250,7 +250,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => QRAttendanceScreen(),
+                  builder: (_) => QRScanAttendanceScreen(),
                 ),
               );
             },
@@ -262,7 +262,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
           Navigator.push(
   context,
   MaterialPageRoute(
-    builder: (context) =>QRDailyAttendanceHistoryScreen(),
+    builder: (context) =>EmployeeQRDailyLogHistoryScreen(),
   ),
 );
 

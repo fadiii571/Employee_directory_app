@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 Future<void> Addemployee({
   required String name,
@@ -151,26 +152,54 @@ Future<void> updateemployee({
   }
 }
 
-Future<void> markAttendanceByAdmin({
-  required String employeeId,
-  required String name,
-  required String status,
-  required String date,
-}) async {
-  final now = DateTime.now();
-  final attendanceRef = FirebaseFirestore.instance
-      .collection('attendance')
-      .doc(employeeId)
-      .collection('records')
-      .doc(date);
 
-  await attendanceRef.set({
-    'employeeId': employeeId,
-    'name': name,
-    'status': status,
-    'timestamp': now,
-    'markedBy': 'qr',
-  });
+Future<void> markQRAttendance(String employeeId, String type) async {
+  final now = DateTime.now();
+  final date = DateFormat('yyyy-MM-dd').format(now);
+  final time = DateFormat('hh:mm a').format(now);
+
+  final empDoc = await FirebaseFirestore.instance
+      .collection('Employees')
+      .doc(employeeId)
+      .get();
+
+  if (!empDoc.exists) {
+    throw Exception("Employee not found");
+  }
+
+  final empData = empDoc.data()!;
+  final recordRef = FirebaseFirestore.instance
+      .collection('attendance')
+      .doc(date)
+      .collection('records')
+      .doc(employeeId);
+
+  final snapshot = await recordRef.get();
+
+  if (snapshot.exists) {
+    final existingData = snapshot.data()!;
+    final List<dynamic> logs = existingData['logs'] ?? [];
+
+    final alreadyMarked = logs.any((log) => log['type'] == type);
+    if (alreadyMarked) {
+      throw Exception("Already marked $type today.");
+    }
+
+    await recordRef.update({
+      'logs': FieldValue.arrayUnion([
+        {'time': time, 'type': type}
+      ])
+    });
+  } else {
+    await recordRef.set({
+      'name': empData['name'],
+      'id': employeeId,
+      'profileImageUrl': empData['profileImageUrl'],
+      'logs': [
+        {'time': time, 'type': type}
+      ]
+    });
+  }
 }
 
 
