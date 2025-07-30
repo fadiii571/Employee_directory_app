@@ -7,8 +7,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
+import 'package:open_file/open_file.dart';
 
-Future<void> generateAndSaveQRasPDF(String data) async {
+
+Future<void> saveQrCodeAsPdf({
+  required String employeeId,
+  required String employeeName,
+}) async {
   final status = await Permission.storage.request();
   if (!status.isGranted) {
     print("❌ Storage permission denied");
@@ -16,9 +21,9 @@ Future<void> generateAndSaveQRasPDF(String data) async {
   }
 
   try {
-    // Generate QR Code as image
+    // Generate QR code from employee ID
     final qrValidationResult = QrValidator.validate(
-      data: data,
+      data: employeeId,
       version: QrVersions.auto,
       errorCorrectionLevel: QrErrorCorrectLevel.M,
     );
@@ -37,27 +42,45 @@ Future<void> generateAndSaveQRasPDF(String data) async {
 
     // Create PDF
     final pdf = pw.Document();
-
     final qrImage = pw.MemoryImage(pngBytes);
 
     pdf.addPage(
       pw.Page(
         build: (pw.Context context) {
-          return pw.Center(
-            child: pw.Image(qrImage, width: 200, height: 200),
+          return pw.Column(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Text(
+                'Employee Name: $employeeName',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Image(qrImage, width: 200, height: 200),
+              pw.SizedBox(height: 10),
+              pw.Text('Employee ID: $employeeId'),
+            ],
           );
         },
       ),
     );
 
-    // Save PDF
-    final directory = await getExternalStorageDirectory();
-    final pdfPath = "${directory!.path}/qr_${DateTime.now().millisecondsSinceEpoch}.pdf";
+    // Save PDF to Downloads
+    final directory = Directory('/storage/emulated/0/Download');
+    if (!(await directory.exists())) {
+      await directory.create(recursive: true);
+    }
+
+    final fileName = 'qr_${employeeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final pdfPath = '${directory.path}/$fileName';
     final pdfFile = File(pdfPath);
+
     await pdfFile.writeAsBytes(await pdf.save());
 
-    print("✅ QR code saved to PDF at: $pdfPath");
+    print("✅ PDF saved to: $pdfPath");
+
+    // Optional: open the PDF
+    await OpenFile.open(pdfPath);
   } catch (e) {
-    print("❌ Error generating/saving PDF: $e");
+    print("❌ Error saving QR as PDF: $e");
   }
 }

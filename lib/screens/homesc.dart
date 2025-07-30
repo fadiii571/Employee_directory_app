@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qr_flutter/qr_flutter.dart' show QrImageView, QrVersions;
 import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.dart';
 
 import 'package:student_projectry_app/model/Employeedetails.dart';
@@ -17,6 +18,52 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  void showQrDialogWithSave({
+  required BuildContext context,
+  required String employeeId,
+  required String employeeName,
+}) {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(employeeName),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 300, // You can adjust width as needed
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrImageView(
+                data: employeeId,
+                version: QrVersions.auto,
+                size: 200,
+              ),
+              SizedBox(height: 16),
+              Text("Employee ID: $employeeId"),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          child: Text("Save as PDF"),
+          onPressed: () async {
+            Navigator.of(context).pop(); // Close dialog
+            await saveQrCodeAsPdf(
+              employeeId: employeeId,
+              employeeName: employeeName,
+            );
+          },
+        ),
+        TextButton(
+          child: Text("Close"),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    ),
+  );
+}
+
   TextEditingController namecont = TextEditingController();
   TextEditingController numbercont = TextEditingController();
   TextEditingController statecont = TextEditingController();
@@ -332,8 +379,12 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                               },
                               icon: Icon(Icons.delete),
                             ),
-                            IconButton(onPressed: ()async{
-                              await generateAndSaveQRasPDF(docs[index].id);
+                            IconButton(onPressed: (){
+                              showQrDialogWithSave(
+                                context: context,
+                                employeeId: docs[index].id,
+                                employeeName: emp.name,
+                              );
                             }, icon: Icon(Icons.qr_code))
                           ],
                         ),
@@ -464,7 +515,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                                   'Cutting',
                                   'Box chain',
                                   'Polish',
-                                ] // exclude 'All' if this is used for form entry
+                                ] 
                                 .map(
                                   (section) => DropdownMenuItem<String>(
                                     value: section,
@@ -569,6 +620,15 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                               longitude:
                                   double.tryParse(longitudecont.text) ?? 0.0,
                             );
+                            namecont.clear();
+                            numbercont.clear();
+                            statecont.clear();
+                            salarycont.clear();
+                          
+                            locationcont.clear();
+                            latitudecont.clear();
+                            longitudecont.clear();
+                            selectedSection = null; // Reset section selection
                           },
                           child: Text(
                             "Add Employee",
