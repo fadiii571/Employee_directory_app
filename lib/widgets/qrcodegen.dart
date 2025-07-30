@@ -1,90 +1,63 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 
-class EmployeeQRCode extends StatefulWidget {
-  final String employeeId;
-  final String employeeName;
-
-  const EmployeeQRCode({
-    super.key,
-    required this.employeeId,
-    required this.employeeName,
-  });
-
-  @override
-  State<EmployeeQRCode> createState() => _EmployeeQRCodeState();
-}
-
-class _EmployeeQRCodeState extends State<EmployeeQRCode> {
-  final GlobalKey globalKey = GlobalKey();
-
-  Future<void> saveQrToGallery() async {
-    try {
-      // Ask permission
-      var status = await Permission.storage.request();
-      if (!status.isGranted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Storage permission denied")),
-        );
-        return;
-      }
-
-      // Capture image
-      RenderRepaintBoundary boundary =
-          globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      // Save to file
-      final directory = await getExternalStorageDirectory();
-      final path = '${directory!.path}/${widget.employeeName}_qr.png';
-      File file = File(path);
-      await file.writeAsBytes(pngBytes);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("QR saved to: $path")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error saving QR: $e")),
-      );
-    }
+Future<void> generateAndSaveQRasPDF(String data) async {
+  final status = await Permission.storage.request();
+  if (!status.isGranted) {
+    print("❌ Storage permission denied");
+    return;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text("QR for ${widget.employeeName}"),
-      content: RepaintBoundary(
-        key: globalKey,
-        child: SizedBox(
-          width: 200,
-          height: 200,
-          child: QrImageView(
-            data: widget.employeeId,
-            version: QrVersions.auto,
-            size: 200.0,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: saveQrToGallery,
-          child: const Text("Save QR"),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Close"),
-        ),
-      ],
+  try {
+    // Generate QR Code as image
+    final qrValidationResult = QrValidator.validate(
+      data: data,
+      version: QrVersions.auto,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
     );
+    final qrCode = qrValidationResult.qrCode;
+
+    final painter = QrPainter.withQr(
+      qr: qrCode!,
+      color: Colors.black,
+      emptyColor: Colors.white,
+      gapless: true,
+    );
+
+    final image = await painter.toImage(300);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    // Create PDF
+    final pdf = pw.Document();
+
+    final qrImage = pw.MemoryImage(pngBytes);
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Center(
+            child: pw.Image(qrImage, width: 200, height: 200),
+          );
+        },
+      ),
+    );
+
+    // Save PDF
+    final directory = await getExternalStorageDirectory();
+    final pdfPath = "${directory!.path}/qr_${DateTime.now().millisecondsSinceEpoch}.pdf";
+    final pdfFile = File(pdfPath);
+    await pdfFile.writeAsBytes(await pdf.save());
+
+    print("✅ QR code saved to PDF at: $pdfPath");
+  } catch (e) {
+    print("❌ Error generating/saving PDF: $e");
   }
 }

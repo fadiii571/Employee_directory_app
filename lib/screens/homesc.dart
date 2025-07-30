@@ -332,8 +332,8 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                               },
                               icon: Icon(Icons.delete),
                             ),
-                            IconButton(onPressed: (){
-                              showDialog(context: context, builder: (context) => EmployeeQRCode(employeeId: docs[index].id, employeeName: emp.name),);
+                            IconButton(onPressed: ()async{
+                              await generateAndSaveQRasPDF(docs[index].id);
                             }, icon: Icon(Icons.qr_code))
                           ],
                         ),

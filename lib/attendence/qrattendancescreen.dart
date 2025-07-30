@@ -13,7 +13,7 @@ class QRScanAttendanceScreen extends StatefulWidget {
 class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool isScanned = false;
-  String selectedType = 'In'; // Default type
+  String selectedType = 'In'; 
 
   @override
   void dispose() {
@@ -31,7 +31,7 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              setState(() => isScanned = false); // Allow scanning again
+              setState(() => isScanned = false); 
             },
             child: const Text("OK"),
           ),

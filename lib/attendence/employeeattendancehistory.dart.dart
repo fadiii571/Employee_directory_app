@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:student_projectry_app/widgets/empattendencehis.dart' show generateAttendancePdf;
 
 class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
   const EmployeeQRDailyLogHistoryScreen({super.key});
@@ -71,6 +72,9 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
             onPressed: () => pickDate(context),
             tooltip: 'Pick Date',
           ),
+          IconButton(onPressed: ()async{
+            await generateAttendancePdf(formattedDate);
+          }, icon: Icon(Icons.picture_as_pdf))
         ],
       ),
       body: Column(
