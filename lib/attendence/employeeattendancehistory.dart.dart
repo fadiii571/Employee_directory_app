@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:student_projectry_app/widgets/empattendencehis.dart' show generateAttendancePdf;
+import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf;
 
 class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
   const EmployeeQRDailyLogHistoryScreen({super.key});

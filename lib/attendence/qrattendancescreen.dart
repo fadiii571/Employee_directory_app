@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+/*import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:intl/intl.dart';
@@ -165,4 +165,4 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreen> {
       ),
     );
   }
-}
+}*/

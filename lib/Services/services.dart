@@ -13,8 +13,10 @@ Future<void> Addemployee({
   required String name,
   required String number,
   required String state,
+  required String district,
   required String salary,
   required String section,
+  required String joiningDate,
   required String profileimageUrl,
   required String imageUrl,
   required String location,
@@ -29,8 +31,10 @@ Future<void> Addemployee({
       "name": name,
       "number": number,
       "state": state,
+      "district": district,
       "salary": salary,
       "section": section,
+      "joiningDate": joiningDate,
       "image": imageUrl,
       "profileimage": profileimageUrl,
       "location": location,
@@ -201,6 +205,11 @@ Future<void> markQRAttendance(String employeeId, String type) async {
     });
   }
 }
+Future<Map<String, dynamic>> getEmployeeByIdforqr(String id) async {
+  final doc = await FirebaseFirestore.instance.collection('Employees').doc(id).get();
+  if (!doc.exists) throw Exception("Employee not found");
+  return doc.data()!;
+}
 
 
 Future<List<Map<String, dynamic>>> getQRDailyAttendance({
@@ -220,3 +229,5 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
     return data;
   }).toList();
 }
+
+

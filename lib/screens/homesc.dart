@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart' show QrImageView, QrVersions;
 import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.dart';
+import 'package:student_projectry_app/attendence/qrscreenwithdialogou.dart';
 
 import 'package:student_projectry_app/model/Employeedetails.dart';
 import 'package:student_projectry_app/Services/services.dart';
-import 'package:student_projectry_app/attendence/qrattendancescreen.dart';
+
 
 import 'package:student_projectry_app/screens/detail.dart';
 import 'package:student_projectry_app/widgets/qrcodegen.dart';
@@ -72,6 +73,9 @@ class _HomeState extends State<Home> {
   TextEditingController locationcont = TextEditingController();
   TextEditingController latitudecont = TextEditingController();
   TextEditingController longitudecont = TextEditingController();
+  TextEditingController joincont = TextEditingController();
+  DateTime? selectedJoiningDate;
+  TextEditingController districtcont = TextEditingController();
 
   String? selectedSection;
   int currentTabIndex = 0;
@@ -297,7 +301,7 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => QRScanAttendanceScreen(),
+                  builder: (_) => QRScanAttendanceScreendialogou(),
                 ),
               );
             },
@@ -482,6 +486,17 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                       ),
                       SizedBox(height: 5),
                       TextField(
+                        controller: districtcont,
+                        decoration: InputDecoration(
+                        hintText: 'District',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.black),
+                        ),
+                      ),),
+                      SizedBox(height: 5),
+                      TextField(
                         controller: salarycont,
                         decoration: InputDecoration(
                           hintText: "Salary",
@@ -532,6 +547,31 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                           ),
                         ),
                       ),
+                      SizedBox(height: 5,),
+                      TextField(
+                        controller: joincont,
+                        decoration: InputDecoration(
+                        hintText: 'joining date',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.black),
+                        ),
+                        suffixIcon: IconButton(onPressed: ()async{
+                          DateTime? pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedJoiningDate ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2101),
+                          );
+                          if (pickedDate != null){
+                            setState(() {
+                              selectedJoiningDate = pickedDate;
+                              joincont.text = pickedDate.toLocal().toString().split(' ')[0];
+                            });
+                          }
+                        }, icon: Icon(Icons.calendar_today)),
+                      ),),
                        SizedBox(height: 5),
                       TextField(
                         controller: locationcont,
@@ -610,8 +650,10 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                               name: namecont.text,
                               number: numbercont.text,
                               state: statecont.text,
+                              district: districtcont.text,
                               salary: salarycont.text,
                               section: sectioncont.text,
+                              joiningDate: joincont.text,
                               context: context,
                               imageUrl: imageUrl ?? "",
                               profileimageUrl: profileimageUrl ?? "",
@@ -624,11 +666,12 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                             numbercont.clear();
                             statecont.clear();
                             salarycont.clear();
-                          
+                            districtcont.clear();
                             locationcont.clear();
                             latitudecont.clear();
                             longitudecont.clear();
                             selectedSection = null; // Reset section selection
+                            joincont.clear();
                           },
                           child: Text(
                             "Add Employee",
