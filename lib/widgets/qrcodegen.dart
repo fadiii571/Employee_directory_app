@@ -9,19 +9,30 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:open_file/open_file.dart';
 
+/// Request storage permission (Android 10+ safe)
+Future<bool> requestStoragePermission() async {
+  if (Platform.isAndroid) {
+    var status = await Permission.manageExternalStorage.status;
+    if (!status.isGranted) {
+      status = await Permission.manageExternalStorage.request();
+    }
+    return status.isGranted;
+  }
+  return true; // iOS/macOS or not required
+}
 
+/// Generate and save QR Code as PDF
 Future<void> saveQrCodeAsPdf({
   required String employeeId,
   required String employeeName,
 }) async {
-  final status = await Permission.storage.request();
-  if (!status.isGranted) {
-    print("❌ Storage permission denied");
+  if (!await requestStoragePermission()) {
+    print("❌ Storage permission not granted");
     return;
   }
 
   try {
-    // Generate QR code from employee ID
+    // Generate QR code
     final qrValidationResult = QrValidator.validate(
       data: employeeId,
       version: QrVersions.auto,
@@ -29,8 +40,13 @@ Future<void> saveQrCodeAsPdf({
     );
     final qrCode = qrValidationResult.qrCode;
 
+    if (qrCode == null) {
+      print("❌ Failed to generate QR code");
+      return;
+    }
+
     final painter = QrPainter.withQr(
-      qr: qrCode!,
+      qr: qrCode,
       color: Colors.black,
       emptyColor: Colors.white,
       gapless: true,
@@ -66,17 +82,16 @@ Future<void> saveQrCodeAsPdf({
 
     // Save PDF to Downloads
     final directory = Directory('/storage/emulated/0/Download');
-    if (!(await directory.exists())) {
+    if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
 
     final fileName = 'qr_${employeeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final pdfPath = '${directory.path}/$fileName';
     final pdfFile = File(pdfPath);
-
     await pdfFile.writeAsBytes(await pdf.save());
 
-    print("✅ PDF saved to: $pdfPath");
+    print("✅ PDF saved at: $pdfPath");
 
     // Optional: open the PDF
     await OpenFile.open(pdfPath);

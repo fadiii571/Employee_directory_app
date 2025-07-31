@@ -230,4 +230,60 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
   }).toList();
 }
 
+class FirebaseService {
+ 
+  Future<Map<String, List<Map<String, dynamic>>>> fetchAttendanceHistory({
+    required DateTime selectedDate,
+    required String viewType,
+    required String selectedEmployeeId,
+    required Map<String, String> employeeNames,
+  }) async {
+    List<String> datesToFetch = [];
+
+    if (viewType == 'Daily') {
+      datesToFetch = [DateFormat('yyyy-MM-dd').format(selectedDate)];
+    } else if (viewType == 'Weekly') {
+      final startOfWeek = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
+      for (int i = 0; i < 7; i++) {
+        datesToFetch.add(DateFormat('yyyy-MM-dd').format(startOfWeek.add(Duration(days: i))));
+      }
+    } else if (viewType == 'Monthly') {
+      final startOfMonth = DateTime(selectedDate.year, selectedDate.month, 1);
+      final endOfMonth = DateTime(selectedDate.year, selectedDate.month + 1, 0);
+      for (int i = 0; i < endOfMonth.day; i++) {
+        datesToFetch.add(DateFormat('yyyy-MM-dd').format(startOfMonth.add(Duration(days: i))));
+      }
+    }
+
+    Map<String, List<Map<String, dynamic>>> history = {};
+    employeeNames.clear();
+
+    for (String date in datesToFetch) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('attendance')
+          .doc(date)
+          .collection('records')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        if (selectedEmployeeId.isEmpty || doc.id == selectedEmployeeId) {
+          final data = doc.data();
+          final logs = List<Map<String, dynamic>>.from(data['logs'] ?? []);
+          final name = data['name'] ?? '';
+          employeeNames[doc.id] = name;
+
+          history[date] ??= [];
+          history[date]!.add({
+            'id': doc.id,
+            'name': name,
+            'profileImageUrl': data['profileImageUrl'] ?? '',
+            'logs': logs,
+          });
+        }
+      }
+    }
+
+    return history;
+  }
+}
 

@@ -1,3 +1,5 @@
+
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -22,174 +24,141 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
   }
 
   Future<void> handleScan(BuildContext context, String scannedId) async {
-  try {
-    final empData = await getEmployeeByIdforqr(scannedId); 
+    try {
+      final empData = await getEmployeeByIdforqr(scannedId);
 
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text("Mark Attendance"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 40,
-              backgroundImage: NetworkImage(empData['profileImageUrl'] ?? ''),
-            ),
-            SizedBox(height: 10),
-            Text(empData['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  icon: Icon(Icons.login),
-                  label: Text("Check In"),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await markQRAttendance(scannedId, "In");
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Checked In")));
-                  },style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                ),
-                SizedBox(width: 10),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.logout),
-                  label: Text("Check Out"),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await markQRAttendance(scannedId, "Out");
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Checked Out")));
-                  },style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                ),
-              ],
-            )
-          ],
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Mark Attendance"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundImage: NetworkImage(empData['profileImageUrl'] ?? ''),
+              ),
+              const SizedBox(height: 10),
+              Text(empData['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.login),
+                    label: const Text("Check In"),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await markQRAttendance(scannedId, "In", empData);
+                    },
+                  ),
+                  SizedBox(width: 10,),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.logout),
+                    label: const Text("Check Out"),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await markQRAttendance(scannedId, "Out", empData);
+                    },
+                  ),
+                ],
+              )
+            ],
+          ),
         ),
-      ),
-    );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
   }
-}
 
-
-  Future<void> markAttendance(String employeeId, String type) async {
+  Future<void> markQRAttendance(String employeeId, String type, Map<String, dynamic> empData) async {
     final now = DateTime.now();
-    final date = DateFormat('yyyy-MM-dd').format(now);
-    final time = DateFormat('hh:mm a').format(now);
+
+    // Shift logic: Start from 4 PM today to 3:59 PM next day
+    final shiftStart = DateTime(now.year, now.month, now.day, 16);
+    final effectiveShiftDate = now.isBefore(shiftStart) ? now.subtract(Duration(days: 1)) : now;
+    final shiftDateKey = DateFormat('yyyy-MM-dd').format(effectiveShiftDate);
+
+    final timeNowFormatted = DateFormat('hh:mm a').format(now);
 
     final recordRef = FirebaseFirestore.instance
         .collection('attendance')
-        .doc(date)
+        .doc(shiftDateKey)
         .collection('records')
         .doc(employeeId);
 
     final snapshot = await recordRef.get();
 
     if (snapshot.exists) {
-      final existingData = snapshot.data()!;
-      final List<dynamic> logs = existingData['logs'] ?? [];
-
+      final data = snapshot.data()!;
+      final logs = List<Map<String, dynamic>>.from(data['logs'] ?? []);
       final alreadyMarked = logs.any((log) => log['type'] == type);
+
       if (alreadyMarked) {
-        showErrorDialog("Already marked $type today.");
+        showErrorDialog("Already marked $type for current shift.");
         return;
       }
 
       await recordRef.update({
         'logs': FieldValue.arrayUnion([
-          {'time': time, 'type': type}
+          {'type': type, 'time': timeNowFormatted}
         ])
       });
     } else {
-      final empDoc = await FirebaseFirestore.instance
-          .collection('Employees')
-          .doc(employeeId)
-          .get();
-
-      final empData = empDoc.data()!;
       await recordRef.set({
         'name': empData['name'],
         'id': employeeId,
         'profileImageUrl': empData['profileImageUrl'],
         'logs': [
-          {'time': time, 'type': type}
+          {'type': type, 'time': timeNowFormatted}
         ]
       });
     }
 
-    Navigator.of(context).pop(); // Close dialog
-    showSuccessDialog("Marked $type successfully at $time");
+    showSuccessDialog("Marked $type at $timeNowFormatted");
   }
 
-  void showAttendanceDialog(String employeeId, String name, String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(radius: 40, backgroundImage: NetworkImage(imageUrl)),
-            const SizedBox(height: 20),
-            const Text("Select Attendance Type"),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.login),
-                  label: const Text("Check In"),
-                  onPressed: () => markAttendance(employeeId, 'In'),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.logout),
-                  label: const Text("Check Out"),
-                  onPressed: () => markAttendance(employeeId, 'Out'),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    ).then((_) => setState(() => isScanned = false));
-  }
-
-  void showErrorDialog(String message) {
+  void showErrorDialog(String msg) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Error"),
-        content: Text(message),
+        content: Text(msg),
         actions: [
           TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() => isScanned = false);
-              },
-              child: const Text("OK"))
+            child: const Text("OK"),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => isScanned = false);
+            },
+          )
         ],
       ),
     );
   }
 
-  void showSuccessDialog(String message) {
+  void showSuccessDialog(String msg) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Success"),
-        content: Text(message),
+        content: Text(msg),
         actions: [
           TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("OK"))
+            child: const Text("OK"),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => isScanned = false);
+            },
+          )
         ],
       ),
     );
   }
-   
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -203,22 +172,19 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
           const SizedBox(height: 20),
           const Text("Scan Employee QR Code Below", style: TextStyle(fontSize: 16)),
           const SizedBox(height: 10),
-          
           Expanded(
             child: MobileScanner(
               controller: _controller,
-              onDetect: (capture) async{
+              onDetect: (capture) async {
                 final barcodes = capture.barcodes;
                 for (final barcode in barcodes) {
-                  final String? code = barcode.rawValue;
+                  final code = barcode.rawValue;
                   if (code != null && !isScanned) {
-                    isScanned = true;
-                    await handleScan(context,code);
-                    await Future.delayed(Duration(seconds: 2));
-                    isScanned = false; 
+                    setState(() => isScanned = true);
+                    await handleScan(context, code);
+                    await Future.delayed(const Duration(seconds: 2));
+                    setState(() => isScanned = false);
                     break;
-                  
-                    
                   }
                 }
               },

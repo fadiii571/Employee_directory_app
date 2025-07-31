@@ -2,18 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf;
+import 'package:student_projectry_app/Services/services.dart'; // import your service
 
 class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
   const EmployeeQRDailyLogHistoryScreen({super.key});
 
   @override
-  State<EmployeeQRDailyLogHistoryScreen> createState() => _EmployeeQRDailyLogHistoryScreenState();
+  State<EmployeeQRDailyLogHistoryScreen> createState() =>
+      _EmployeeQRDailyLogHistoryScreenState();
 }
 
-class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHistoryScreen> {
+class _EmployeeQRDailyLogHistoryScreenState
+    extends State<EmployeeQRDailyLogHistoryScreen> {
   DateTime selectedDate = DateTime.now();
+  String selectedEmployeeId = '';
+  String viewType = 'Daily';
+  Map<String, String> employeeNames = {};
 
-  String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
+  String get formattedDate =>
+      DateFormat('yyyy-MM-dd').format(selectedDate);
 
   Future<void> pickDate(BuildContext context) async {
     final picked = await showDatePicker(
@@ -28,18 +35,8 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
     }
   }
 
-  Stream<QuerySnapshot> getAttendanceStream() {
-    return FirebaseFirestore.instance
-        .collection('attendance')
-        .doc(formattedDate)
-        .collection('records')
-        .snapshots();
-  }
-
   Widget buildLogList(List logs) {
-    if (logs.isEmpty) {
-      return const Text("No logs");
-    }
+    if (logs.isEmpty) return const Text("No logs");
 
     logs.sort((a, b) {
       final timeA = DateFormat('hh:mm a').parse(a['time']);
@@ -47,8 +44,10 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
       return timeA.compareTo(timeB);
     });
 
-    final inLogs = logs.where((log) => log['type'] == 'In').map((log) => log['time']).toList();
-    final outLogs = logs.where((log) => log['type'] == 'Out').map((log) => log['time']).toList();
+    final inLogs =
+        logs.where((log) => log['type'] == 'In').map((log) => log['time']).toList();
+    final outLogs =
+        logs.where((log) => log['type'] == 'Out').map((log) => log['time']).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,56 +71,99 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
             onPressed: () => pickDate(context),
             tooltip: 'Pick Date',
           ),
-          IconButton(onPressed: ()async{
-            await generateAttendancePdf(formattedDate);
-          }, icon: Icon(Icons.picture_as_pdf))
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () async {
+              await generateAttendancePdf(formattedDate);
+            },
+          ),
         ],
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12.0),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
               children: [
-                const Text("Selected Date: ", style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(formattedDate),
+                DropdownButton<String>(
+                  value: viewType,
+                  items: ['Daily', 'Weekly', 'Monthly']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => viewType = val);
+                  },
+                ),
+                if (employeeNames.isNotEmpty)
+                  DropdownButton<String>(
+                    value: selectedEmployeeId.isNotEmpty ? selectedEmployeeId : null,
+                    hint: const Text("All Employees"),
+                    items: employeeNames.entries
+                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() => selectedEmployeeId = val ?? '');
+                    },
+                  ),
               ],
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: getAttendanceStream(),
+            child: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+              future: FirebaseService().fetchAttendanceHistory(
+                selectedDate: selectedDate,
+                viewType: viewType,
+                selectedEmployeeId: selectedEmployeeId,
+                employeeNames: employeeNames,
+              ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs = snapshot.data?.docs ?? [];
+                final history = snapshot.data ?? {};
 
-                if (docs.isEmpty) {
-                  return const Center(child: Text("No attendance data found for this date."));
+                if (history.isEmpty) {
+                  return const Center(child: Text("No attendance records found."));
                 }
 
-                return ListView.separated(
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    final name = data['name'] ?? 'Unknown';
-                    final imageUrl = data['profileImageUrl'];
-                    final logs = data['logs'] ?? [];
+                final sortedDates = history.keys.toList()
+                  ..sort((a, b) => b.compareTo(a));
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: imageUrl != null && imageUrl.isNotEmpty
-                            ? NetworkImage(imageUrl)
-                            : null,
-                        child: (imageUrl == null || imageUrl.isEmpty)
-                            ? Text(name.isNotEmpty ? name[0] : '?')
-                            : null,
-                      ),
-                      title: Text(name),
-                      subtitle: buildLogList(List<Map<String, dynamic>>.from(logs)),
+                return ListView.builder(
+                  itemCount: sortedDates.length,
+                  itemBuilder: (context, index) {
+                    final date = sortedDates[index];
+                    final records = history[date]!;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          color: Colors.grey.shade200,
+                          width: double.infinity,
+                          child: Text(
+                            DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(date)),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        ...records.map((record) {
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: (record['profileImageUrl'] as String).isNotEmpty
+                                  ? NetworkImage(record['profileImageUrl'])
+                                  : null,
+                              child: (record['profileImageUrl'] as String).isEmpty
+                                  ? Text(record['name'][0])
+                                  : null,
+                            ),
+                            title: Text(record['name']),
+                            subtitle: buildLogList(List<Map<String, dynamic>>.from(record['logs'])),
+                          );
+                        }),
+                      ],
                     );
                   },
                 );

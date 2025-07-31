@@ -1,15 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.example.student_projectry_app">
 
-    <!-- Permissions for storage access -->
+    <!-- Permissions -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <!-- WRITE_EXTERNAL_STORAGE is only valid for Android 9 and below -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
-    <!-- MANAGE_EXTERNAL_STORAGE is only needed if you're accessing all files on Android 11+ -->
-    <!-- ⚠️ Not needed for saving to MediaStore or using image_gallery_saver -->
-    <!-- <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" /> -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name="${applicationName}"

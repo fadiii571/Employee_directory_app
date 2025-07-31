@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart' show QrImageView, QrVersions;
 import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.dart';
 import 'package:student_projectry_app/attendence/qrscreenwithdialogou.dart';
@@ -15,7 +16,23 @@ class Home extends StatefulWidget {
   const Home({super.key});
 
   @override
-  State<Home> createState() => _HomeState();
+  State<Home> createState() => _HomeState();}
+Widget buildTextField(String hint, TextEditingController controller, {bool number = false}) {
+  return TextField(
+    controller: controller,
+    decoration: InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black),
+      ),
+    ),
+    keyboardType: number ? TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+    inputFormatters: number
+        ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
+        : [],
+  );
 }
 
 class _HomeState extends State<Home> {
@@ -412,290 +429,199 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
       
 
         floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) {
-                String? imageUrl;
-                String? profileimageUrl;
-                return AlertDialog(
-                  title: Text(
-                    "Add employee details",
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+  onPressed: () {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String? imageUrl;
+        String? profileimageUrl;
+
+        return AlertDialog(
+          title: Text(
+            "Add employee details",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+              maxWidth: 400, // optional fixed width
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    child: IconButton(
+                      onPressed: () async {
+                        final uploaded = await uploadToCloudinary();
+                        if (uploaded != null) {
+                          profileimageUrl = uploaded;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Image uploaded")),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Failed to upload image")),
+                          );
+                        }
+                      },
+                      icon: Icon(Icons.camera_alt),
                     ),
                   ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        child: IconButton(
-                          onPressed: () async {
-                            final uploaded = await uploadToCloudinary();
-                            if (uploaded != null) {
-                              profileimageUrl = uploaded;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Image uploaded")),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Failed to upload image")),
-                              );
-                            }
-                          },
-                          icon: Icon(Icons.camera_alt),
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      TextField(
-                        controller: namecont,
-                        decoration: InputDecoration(
-                          hintText: "Name",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      TextField(
-                        controller: numbercont,
-                        decoration: InputDecoration(
-                          hintText: "Phone number",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      TextField(
-                        controller: statecont,
-                        decoration: InputDecoration(
-                          hintText: "State",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      TextField(
-                        controller: districtcont,
-                        decoration: InputDecoration(
-                        hintText: 'District',
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black),
-                        ),
-                      ),),
-                      SizedBox(height: 5),
-                      TextField(
-                        controller: salarycont,
-                        decoration: InputDecoration(
-                          hintText: "Salary",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 5),
-      
-                      DropdownButtonFormField<String>(
-                        value: selectedSection,
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            selectedSection = newValue;
-                            sectioncont.text = newValue ?? '';
-                          });
-                        },
-                        items:
-                            [
-                                  'Admin office',
-                                  'Anchor',
-                                  'Fancy',
-                                  'KK',
-                                  'Soldering',
-                                  'Wire',
-                                  'Joint',
-                                  'V chain',
-                                  'Cutting',
-                                  'Box chain',
-                                  'Polish',
-                                ] 
-                                .map(
-                                  (section) => DropdownMenuItem<String>(
-                                    value: section,
-                                    child: Text(section),
-                                  ),
-                                )
-                                .toList(),
-                        decoration: InputDecoration(
-                          hintText: "Select Section",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 5,),
-                      TextField(
-                        controller: joincont,
-                        decoration: InputDecoration(
-                        hintText: 'joining date',
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black),
-                        ),
-                        suffixIcon: IconButton(onPressed: ()async{
+                  SizedBox(height: 10),
+                  buildTextField("Name", namecont),
+                  SizedBox(height: 5,),
+                  buildTextField("Phone number", numbercont),
+                  SizedBox(height: 5),
+                  buildTextField("State", statecont),
+                  SizedBox(height: 5),
+                  buildTextField("District", districtcont),
+                  SizedBox(height: 5),
+                  buildTextField("Salary", salarycont),
+                  SizedBox(height: 5),
+                  DropdownButtonFormField<String>(
+                    value: selectedSection,
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        selectedSection = newValue;
+                        sectioncont.text = newValue ?? '';
+                      });
+                    },
+                    items: [
+                      'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
+                      'Wire', 'Joint', 'V chain', 'Cutting',
+                      'Box chain', 'Polish',
+                    ].map((section) => DropdownMenuItem(
+                      value: section,
+                      child: Text(section),
+                    )).toList(),
+                    decoration: InputDecoration(
+                      hintText: "Select Section",
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  TextField(
+                    controller: joincont,
+                    decoration: InputDecoration(
+                      hintText: 'Joining date',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.calendar_today),
+                        onPressed: () async {
                           DateTime? pickedDate = await showDatePicker(
                             context: context,
                             initialDate: selectedJoiningDate ?? DateTime.now(),
                             firstDate: DateTime(2000),
                             lastDate: DateTime(2101),
                           );
-                          if (pickedDate != null){
+                          if (pickedDate != null) {
                             setState(() {
                               selectedJoiningDate = pickedDate;
-                              joincont.text = pickedDate.toLocal().toString().split(' ')[0];
+                              joincont.text =
+                                  pickedDate.toLocal().toString().split(' ')[0];
                             });
                           }
-                        }, icon: Icon(Icons.calendar_today)),
-                      ),),
-                       SizedBox(height: 5),
-                      TextField(
-                        controller: locationcont,
-                        decoration: InputDecoration(
-                          hintText: "Home Address",
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
+                        },
                       ),
-                      SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: latitudecont,
-                              decoration: InputDecoration(
-                                hintText: "Latitude",
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.black),
-                                ),
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          SizedBox(width: 5),
-                          Expanded(
-                            child: TextField(
-                              controller: longitudecont,
-                              decoration: InputDecoration(
-                                hintText: "Longitude",
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.black),
-                                ),
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // ...existing code...
-                      SizedBox(height: 5),
-      
-                      Text("Upload identity proof ↓ "),
-                      CircleAvatar(
-                        child: IconButton(
-                          onPressed: () async {
-                            final uploaded = await uploadToCloudinary();
-                            if (uploaded != null) {
-                              imageUrl = uploaded;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Image uploaded")),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Failed to upload image")),
-                              );
-                            }
-                          },
-                          icon: Icon(Icons.image),
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      SizedBox(
-                        height: 40,
-                        width: 160,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Addemployee(
-                              name: namecont.text,
-                              number: numbercont.text,
-                              state: statecont.text,
-                              district: districtcont.text,
-                              salary: salarycont.text,
-                              section: sectioncont.text,
-                              joiningDate: joincont.text,
-                              context: context,
-                              imageUrl: imageUrl ?? "",
-                              profileimageUrl: profileimageUrl ?? "",
-                              location: locationcont.text,
-                              latitude: double.tryParse(latitudecont.text) ?? 0.0,
-                              longitude:
-                                  double.tryParse(longitudecont.text) ?? 0.0,
-                            );
-                            namecont.clear();
-                            numbercont.clear();
-                            statecont.clear();
-                            salarycont.clear();
-                            districtcont.clear();
-                            locationcont.clear();
-                            latitudecont.clear();
-                            longitudecont.clear();
-                            selectedSection = null; // Reset section selection
-                            joincont.clear();
-                          },
-                          child: Text(
-                            "Add Employee",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  buildTextField("Home Address", locationcont),
+                  SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Expanded(child: buildTextField("Latitude", latitudecont,  )),
+                      SizedBox(width: 5),
+                      Expanded(child: buildTextField("Longitude", longitudecont, )),
                     ],
                   ),
-                );
-              },
-            );
-          },
-          child: Icon(Icons.add),
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-        ),
+                  SizedBox(height: 5),
+                  Text("Upload identity proof ↓"),
+                  CircleAvatar(
+                    child: IconButton(
+                      onPressed: () async {
+                        final uploaded = await uploadToCloudinary();
+                        if (uploaded != null) {
+                          imageUrl = uploaded;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Image uploaded")),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Failed to upload image")),
+                          );
+                        }
+                      },
+                      icon: Icon(Icons.image),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  SizedBox(
+                    height: 40,
+                    width: 160,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Addemployee(
+                          name: namecont.text,
+                          number: numbercont.text,
+                          state: statecont.text,
+                          district: districtcont.text,
+                          salary: salarycont.text,
+                          section: sectioncont.text,
+                          joiningDate: joincont.text,
+                          context: context,
+                          imageUrl: imageUrl ?? "",
+                          profileimageUrl: profileimageUrl ?? "",
+                          location: locationcont.text,
+                          latitude: double.tryParse(latitudecont.text) ?? 0.0,
+                          longitude: double.tryParse(longitudecont.text) ?? 0.0,
+                        );
+                        // Clear fields
+                        namecont.clear();
+                        numbercont.clear();
+                        statecont.clear();
+                        salarycont.clear();
+                        districtcont.clear();
+                        locationcont.clear();
+                        latitudecont.clear();
+                        longitudecont.clear();
+                        selectedSection = null;
+                        joincont.clear();
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        "Add Employee",
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  },
+  child: Icon(Icons.add),
+  backgroundColor: Colors.blue,
+  foregroundColor: Colors.white,
+)
+
+
       ),
     );
   }
