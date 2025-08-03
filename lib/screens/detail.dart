@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+
 import 'package:student_projectry_app/imageview/imageview.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
+
+
 import 'package:url_launcher/url_launcher.dart';
 
 class EmployeeDetailPage extends StatelessWidget {
   final Employee employee;
 
-  const EmployeeDetailPage({Key? key, required this.employee})
-    : super(key: key);
+  const EmployeeDetailPage({Key? key, required this.employee}) : super(key: key);
+
   Widget _infoCard(String title, List<Widget> children) {
     return Card(
-      margin: EdgeInsets.symmetric(vertical: 12),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 3,
       child: Padding(
@@ -18,12 +21,9 @@ class EmployeeDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            Divider(thickness: 1),
-            SizedBox(height: 8),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Divider(thickness: 1),
+            const SizedBox(height: 10),
             ...children,
           ],
         ),
@@ -35,101 +35,138 @@ class EmployeeDetailPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) Icon(icon, size: 20),
-          SizedBox(width: icon != null ? 8 : 0),
-          Text('$label:', style: TextStyle(fontWeight: FontWeight.bold,fontSize: 22)),
-          SizedBox(width: 6),
-          Expanded(child: Text(value, style: TextStyle(fontSize: 22,fontWeight: FontWeight.bold))),
+          if (icon != null) Icon(icon, size: 22),
+          if (icon != null) const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 16, color: Colors.black),
+                children: [
+                  TextSpan(
+                    text: '$label: ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: value),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(title: Text(employee.name)
-    ),
-    body: SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 50,
-              backgroundImage: NetworkImage(employee.profileImageUrl),
-            ),
-            SizedBox(height: 15),
-            _infoCard("Contact", [
-              _infoRow("Contact", employee.number, icon: Icons.phone),
-            ]),
-            _infoCard("State", [
-              _infoRow("State", employee.state, icon: Icons.location_on),
-            ]),
-            _infoCard("Section", [
-              _infoRow("Section", employee.section, icon: Icons.badge),
-            ]),
-            _infoCard("Salary", [
-              _infoRow("Salary", "₹${employee.salary}", icon: Icons.attach_money),
-            ]),
-            _infoCard("Address", [
-              _infoRow("Address", employee.location, icon: Icons.home),
-              SizedBox(height: 10),
-              GestureDetector(
-                onTap: () {
-                  final url =
-                      'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
-                  launchUrl(Uri.parse(url));
-                },
-                child: Row(
-                  children: [
-                    Icon(Icons.map, size: 20, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text(
-                      "View on Map",
-                      style: TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(employee.name)),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Hero(
+                tag: 'profile-${employee.profileImageUrl}',
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundImage: NetworkImage(employee.profileImageUrl),
                 ),
               ),
-            ]),
-            
-            Card(
-              margin: const EdgeInsets.only(top: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 4,
-              clipBehavior: Clip.antiAlias,
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => Imageviewesc(imageUrl: employee.imageUrl),
+              const SizedBox(height: 20),
+
+              _infoCard("Contact", [
+                _infoRow("Phone", employee.number, icon: Icons.phone),
+              ]),
+
+              _infoCard("State", [
+                _infoRow("State", employee.state, icon: Icons.location_on),
+              ]),
+
+              _infoCard("Section", [
+                _infoRow("Section", employee.section, icon: Icons.badge),
+              ]),
+
+              _infoCard("Salary", [
+                _infoRow("Salary", "₹${employee.salary}", icon: Icons.attach_money),
+              ]),
+
+              _infoCard("Address", [
+                _infoRow("Address", employee.location, icon: Icons.home),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: () async {
+                    final url = 'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
+                    if (await canLaunchUrl(Uri.parse(url))) {
+                      await launchUrl(Uri.parse(url));
+                    }
+                  },
+                  child: Row(
+                    children: const [
+                      Icon(Icons.map, size: 20, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text(
+                        "View on Map",
+                        style: TextStyle(
+                          color: Colors.blue,
+                          decoration: TextDecoration.underline,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]),
+
+              const SizedBox(height: 16),
+
+              Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 4,
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => Imageviewesc(imageUrl: employee.imageUrl),
+                      ),
+                    );
+                  },
+                  child: Hero(
+                    tag: employee.imageUrl,
+                    child: Image.network(
+                      employee.imageUrl,
+                      height: 200,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          height: 200,
+                          alignment: Alignment.center,
+                          child: const CircularProgressIndicator(),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => const SizedBox(
+                        height: 200,
+                        child: Center(child: Icon(Icons.broken_image, size: 40)),
+                      ),
                     ),
-                  );
-                },
-                child: Hero(
-                  tag: employee.imageUrl,
-                  child: Image.network(
-                    employee.imageUrl,
-                    height: 200,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
                   ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+
+
+
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}}
+    );
+  }
+}

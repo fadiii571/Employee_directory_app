@@ -1,8 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf;
-import 'package:student_projectry_app/Services/services.dart'; // import your service
+import 'package:student_projectry_app/Services/services.dart';
 
 class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
   const EmployeeQRDailyLogHistoryScreen({super.key});
@@ -12,15 +14,15 @@ class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
       _EmployeeQRDailyLogHistoryScreenState();
 }
 
-class _EmployeeQRDailyLogHistoryScreenState
-    extends State<EmployeeQRDailyLogHistoryScreen> {
+class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHistoryScreen> {
   DateTime selectedDate = DateTime.now();
   String selectedEmployeeId = '';
   String viewType = 'Daily';
   Map<String, String> employeeNames = {};
+  List<Map<String, dynamic>> currentVisibleLogs = [];
 
-  String get formattedDate =>
-      DateFormat('yyyy-MM-dd').format(selectedDate);
+
+  String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
 
   Future<void> pickDate(BuildContext context) async {
     final picked = await showDatePicker(
@@ -44,20 +46,49 @@ class _EmployeeQRDailyLogHistoryScreenState
       return timeA.compareTo(timeB);
     });
 
-    final inLogs =
-        logs.where((log) => log['type'] == 'In').map((log) => log['time']).toList();
-    final outLogs =
-        logs.where((log) => log['type'] == 'Out').map((log) => log['time']).toList();
+    final inLogs = logs.where((log) => log['type'] == 'In').toList();
+    final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+
+    final inTimes = inLogs.map((log) => log['time']).join(', ');
+    final outTimes = outLogs.map((log) => log['time']).join(', ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (inLogs.isNotEmpty)
-          Text("In: ${inLogs.join(', ')}", style: const TextStyle(color: Colors.green)),
+          Text("In: $inTimes", style: const TextStyle(color: Colors.green)),
         if (outLogs.isNotEmpty)
-          Text("Out: ${outLogs.join(', ')}", style: const TextStyle(color: Colors.red)),
+          Text("Out: $outTimes", style: const TextStyle(color: Colors.red)),
       ],
     );
+  }
+
+  Duration calculateTotalDuration(List logs) {
+    logs.sort((a, b) {
+      final timeA = DateFormat('hh:mm a').parse(a['time']);
+      final timeB = DateFormat('hh:mm a').parse(b['time']);
+      return timeA.compareTo(timeB);
+    });
+
+    final inLogs = logs.where((log) => log['type'] == 'In').toList();
+    final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+
+    int count = min(inLogs.length, outLogs.length);
+    Duration total = Duration.zero;
+
+    for (int i = 0; i < count; i++) {
+      final inTime = DateFormat('hh:mm a').parse(inLogs[i]['time']);
+      final outTime = DateFormat('hh:mm a').parse(outLogs[i]['time']);
+      total += outTime.difference(inTime);
+    }
+
+    return total;
+  }
+
+  String formatDuration(Duration duration) {
+    int hours = duration.inHours;
+    int minutes = duration.inMinutes.remainder(60);
+    return "${hours}h ${minutes}m";
   }
 
   @override
@@ -74,7 +105,7 @@ class _EmployeeQRDailyLogHistoryScreenState
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
             onPressed: () async {
-              await generateAttendancePdf(formattedDate);
+              await generateAttendancePdf(title: "$viewType Attendance: ${formattedDate}", logs:currentVisibleLogs,viewType: viewType);
             },
           ),
         ],
@@ -111,7 +142,7 @@ class _EmployeeQRDailyLogHistoryScreenState
           ),
           Expanded(
             child: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
-              future: FirebaseService().fetchAttendanceHistory(
+              future: fetchAttendanceHistory(
                 selectedDate: selectedDate,
                 viewType: viewType,
                 selectedEmployeeId: selectedEmployeeId,
@@ -123,7 +154,7 @@ class _EmployeeQRDailyLogHistoryScreenState
                 }
 
                 final history = snapshot.data ?? {};
-
+                currentVisibleLogs = history.values.expand((e) => e).toList();
                 if (history.isEmpty) {
                   return const Center(child: Text("No attendance records found."));
                 }
@@ -150,6 +181,9 @@ class _EmployeeQRDailyLogHistoryScreenState
                           ),
                         ),
                         ...records.map((record) {
+                          final logs = List<Map<String, dynamic>>.from(record['logs']);
+                          final totalDuration = calculateTotalDuration(logs);
+
                           return ListTile(
                             leading: CircleAvatar(
                               backgroundImage: (record['profileImageUrl'] as String).isNotEmpty
@@ -160,7 +194,11 @@ class _EmployeeQRDailyLogHistoryScreenState
                                   : null,
                             ),
                             title: Text(record['name']),
-                            subtitle: buildLogList(List<Map<String, dynamic>>.from(record['logs'])),
+                            subtitle: buildLogList(logs),
+                            trailing: viewType == 'Daily'
+                                ? Text(formatDuration(totalDuration),
+                                    style: const TextStyle(fontWeight: FontWeight.bold))
+                                : null,
                           );
                         }),
                       ],

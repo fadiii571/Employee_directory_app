@@ -1,60 +1,89 @@
-import 'dart:io';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 
-Future<void> generateAttendancePdf(String date) async {
+Future<void> generateAttendancePdf({
+  required String title,
+  required List<Map<String, dynamic>> logs,
+  String viewType = 'Daily',
+}) async {
   final pdf = pw.Document();
 
-  final snapshot = await FirebaseFirestore.instance
-      .collection('attendance')
-      .doc(date)
-      .collection('records')
-      .get();
-
   pdf.addPage(
-    pw.Page(
-      build: (pw.Context context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text("Attendance Report - $date",
-                style: pw.TextStyle(
-                    fontSize: 24, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 20),
-            pw.Table.fromTextArray(
-              headers: ['Name', 'ID', 'In Time', 'Out Time'],
-              data: snapshot.docs.map((doc) {
-                final data = doc.data();
-                final logs = data['logs'] as List<dynamic>;
-
-                String inTime = '';
-                String outTime = '';
-                for (var log in logs) {
-                  if (log['type'] == 'In') inTime = log['time'];
-                  if (log['type'] == 'Out') outTime = log['time'];
-                }
-
-                return [
-                  data['name'] ?? '',
-                  data['id'] ?? '',
-                  inTime,
-                  outTime,
-                ];
-              }).toList(),
-            )
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      build: (context) => [
+        pw.Text(title, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 16),
+        pw.Table.fromTextArray(
+          headers: [
+            'Employee Name',
+            'Check-In(s)',
+            'Check-Out(s)',
+            if (viewType == 'Daily') 'Total Hours',
           ],
-        );
-      },
+          data: logs.map((record) {
+            final name = record['name'] ?? 'Unknown';
+            final logList = List<Map<String, dynamic>>.from(record['logs'] ?? []);
+
+            logList.sort((a, b) {
+              final timeA = DateFormat('hh:mm a').parse(a['time']);
+              final timeB = DateFormat('hh:mm a').parse(b['time']);
+              return timeA.compareTo(timeB);
+            });
+
+            final inLogs = logList
+                .where((log) => log['type'] == 'In')
+                .map((log) => log['time'])
+                .join(', ');
+            final outLogs = logList
+                .where((log) => log['type'] == 'Out')
+                .map((log) => log['time'])
+                .join(', ');
+
+            String total = '';
+            if (viewType == 'Daily') {
+              total = _calculateTotalDurationFormatted(logList);
+            }
+
+            return [
+              name,
+              inLogs,
+              outLogs,
+              if (viewType == 'Daily') total,
+            ];
+          }).toList(),
+        ),
+      ],
     ),
   );
 
-  // Save file
-  final output = await getExternalStorageDirectory();
-  final file = File("${output!.path}/Attendance-$date.pdf");
-  await file.writeAsBytes(await pdf.save());
+  await Printing.layoutPdf(onLayout: (format) => pdf.save());
+}
 
-  // Optional: Preview or share
-  await Printing.sharePdf(bytes: await pdf.save(), filename: 'Attendance-$date.pdf');
+/// Place this BELOW the above function
+String _calculateTotalDurationFormatted(List<Map<String, dynamic>> logs) {
+  logs.sort((a, b) {
+    final timeA = DateFormat('hh:mm a').parse(a['time']);
+    final timeB = DateFormat('hh:mm a').parse(b['time']);
+    return timeA.compareTo(timeB);
+  });
+
+  final inLogs = logs.where((log) => log['type'] == 'In').toList();
+  final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+
+  int count = inLogs.length < outLogs.length ? inLogs.length : outLogs.length;
+  Duration total = Duration.zero;
+
+  for (int i = 0; i < count; i++) {
+    final inTime = DateFormat('hh:mm a').parse(inLogs[i]['time']);
+    final outTime = DateFormat('hh:mm a').parse(outLogs[i]['time']);
+    total += outTime.difference(inTime);
+  }
+
+  int hours = total.inHours;
+  int minutes = total.inMinutes.remainder(60);
+
+  return '${hours}h ${minutes}m';
 }

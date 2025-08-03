@@ -2,86 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart' show QrImageView, QrVersions;
+
 import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.dart';
 import 'package:student_projectry_app/attendence/qrscreenwithdialogou.dart';
-
 import 'package:student_projectry_app/model/Employeedetails.dart';
 import 'package:student_projectry_app/Services/services.dart';
-
-
+import 'package:student_projectry_app/payroll/markpaidleave.dart';
 import 'package:student_projectry_app/screens/detail.dart';
+import 'package:student_projectry_app/screens/payrollscreen.dart';
+import 'package:student_projectry_app/payroll/payrollscreen2.dart';
+import 'package:student_projectry_app/screens/qrscreen.dart';
 import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
 
   @override
-  State<Home> createState() => _HomeState();}
-Widget buildTextField(String hint, TextEditingController controller, {bool number = false}) {
-  return TextField(
-    controller: controller,
-    decoration: InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    keyboardType: number ? TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-    inputFormatters: number
-        ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
-        : [],
-  );
+  State<Home> createState() => _HomeState();
 }
 
 class _HomeState extends State<Home> {
-  void showQrDialogWithSave({
-  required BuildContext context,
-  required String employeeId,
-  required String employeeName,
-}) {
-  showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: Text(employeeName),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 300, // You can adjust width as needed
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              QrImageView(
-                data: employeeId,
-                version: QrVersions.auto,
-                size: 200,
-              ),
-              SizedBox(height: 16),
-              Text("Employee ID: $employeeId"),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          child: Text("Save as PDF"),
-          onPressed: () async {
-            Navigator.of(context).pop(); // Close dialog
-            await saveQrCodeAsPdf(
-              employeeId: employeeId,
-              employeeName: employeeName,
-            );
-          },
-        ),
-        TextButton(
-          child: Text("Close"),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ],
-    ),
-  );
-}
-
   TextEditingController namecont = TextEditingController();
   TextEditingController numbercont = TextEditingController();
   TextEditingController statecont = TextEditingController();
@@ -91,8 +31,8 @@ class _HomeState extends State<Home> {
   TextEditingController latitudecont = TextEditingController();
   TextEditingController longitudecont = TextEditingController();
   TextEditingController joincont = TextEditingController();
-  DateTime? selectedJoiningDate;
   TextEditingController districtcont = TextEditingController();
+  DateTime? selectedJoiningDate;
 
   String? selectedSection;
   int currentTabIndex = 0;
@@ -104,102 +44,118 @@ class _HomeState extends State<Home> {
     });
   }
 
-  void editbox(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  Widget buildTextField(String hint, TextEditingController controller, {bool number = false}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+       labelText: hint,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      keyboardType: number ? TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      inputFormatters: number
+          ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
+          : [],
+    );
+  }
 
-  namecont.text = data['name'];
-  numbercont.text = data['number'];
-  statecont.text = data['state'];
-  salarycont.text = data['salary'];
-  sectioncont.text = data['section'];
-  locationcont.text = data['location'];
-  latitudecont.text = data['latitude'].toString();
-  longitudecont.text = data['longitude'].toString();
-bool isActive = data.containsKey('status') ? data['status'] : true;
-  String? selectedDropdownSection = data['section'];
-  
-    showDialog(
-      context: context,
-      builder: (context) {
-        bool isActive = doc.data().toString().contains('status') ? doc['status'] : true;
-        String? selectedDropdownSection = doc['section'];
+  void showQrDialogWithSave({
+  required BuildContext context,
+  required String employeeId,
+  required String employeeName,
+}) {
+  showDialog(
+  context: context,
+  builder: (BuildContext context) {
+    return AlertDialog(
+      title: Text(employeeName),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(
+              data: employeeId,
+              version: QrVersions.auto,
+              size: 200,
+            ),
+            const SizedBox(height: 16),
+            Text("Employee ID: $employeeId"),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            saveQrCodeAsPdf(employeeId: employeeId, employeeName: employeeName);
+            Navigator.of(context).pop();
+          },
+          child: const Text("Save as PDF"),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text("Close"),
+        ),
+      ],
+    );
+  },
+);
 
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text("Edit Employee"),
-              content: SingleChildScrollView(
-                child: Column(
+
+}
+
+   void editbox(DocumentSnapshot doc) {
+  final data = doc.data() as Map<String, dynamic>;
+  namecont.text = data['name'] ?? '';
+  numbercont.text = data['number'] ?? '';
+  statecont.text = data['state'] ?? '';
+  salarycont.text = data['salary'] ?? '';
+  sectioncont.text = data['section'] ?? '';
+  locationcont.text = data['location'] ?? '';
+  latitudecont.text = (data['latitude'] ?? '').toString();
+  longitudecont.text = (data['longitude'] ?? '').toString();
+  bool isActive = data['active'] ?? true;
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    buildTextField("Name", namecont),
-                    SizedBox(height: 5),
-                    buildTextField("Phone number", numbercont),
-                    SizedBox(height: 5),
-                    buildTextField("State", statecont),
-                    SizedBox(height: 5),
-                    buildTextField("Salary", salarycont),
-                    SizedBox(height: 5),
-                    DropdownButtonFormField<String>(
-                      value: selectedDropdownSection,
-                      onChanged: (String? newValue) {
+                    const Text("Edit Employee", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    TextField(controller: namecont, decoration: const InputDecoration(labelText: "Name")),
+                    TextField(controller: numbercont, decoration: const InputDecoration(labelText: "Number"), keyboardType: TextInputType.phone),
+                    TextField(controller: statecont, decoration: const InputDecoration(labelText: "State")),
+                    TextField(controller: salarycont, decoration: const InputDecoration(labelText: "Salary"), keyboardType: TextInputType.number),
+                    TextField(controller: sectioncont, decoration: const InputDecoration(labelText: "Section")),
+                    TextField(controller: locationcont, decoration: const InputDecoration(labelText: "Location")),
+                    TextField(controller: latitudecont, decoration: const InputDecoration(labelText: "Latitude"), keyboardType: TextInputType.number),
+                    TextField(controller: longitudecont, decoration: const InputDecoration(labelText: "Longitude"), keyboardType: TextInputType.number),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      title: const Text("Active"),
+                      value: isActive,
+                      onChanged: (value) {
                         setState(() {
-                          selectedDropdownSection = newValue;
-                          sectioncont.text = newValue ?? '';
+                          isActive = value;
                         });
                       },
-                      items: [
-                        'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-                        'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
-                      ]
-                          .map((section) => DropdownMenuItem<String>(
-                                value: section,
-                                child: Text(section),
-                              ))
-                          .toList(),
-                      decoration: InputDecoration(
-                        hintText: "Select Section",
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.black),
-                        ),
-                      ),
                     ),
-                    SizedBox(height: 5),
-                    buildTextField("Home Address", locationcont),
-                    SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Expanded(child: buildTextField("Latitude", latitudecont)),
-                        SizedBox(width: 5),
-                        Expanded(child: buildTextField("Longitude", longitudecont)),
-                      ],
-                    ),
-                    SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Status: ${isActive ? "Active" : "Inactive"}',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        Switch(
-                          value: isActive,
-                          onChanged: (value) {
-                            setState(() {
-                              isActive = value;
-                            });
-                          },
-                          activeColor: Colors.green,
-                          inactiveThumbColor: Colors.red,
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () {
-                        updateemployee(
+                      onPressed: () async {
+                        await updateemployee(
                           id: doc.id,
                           name: namecont.text,
                           number: numbercont.text,
@@ -214,34 +170,182 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
                         );
                         Navigator.pop(context);
                       },
-                      child: Text(
-                        "Update Employee",
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
+                      child: const Text("Update"),
                     ),
                   ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
-  Widget buildTextField(String hint, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        hintText: hint,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.black),
+  void showAddEmployeeDialog() {
+    String? profileimageUrl;
+    String? imageUrl;
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: 12),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 500,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("Add Employee Details",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                SizedBox(height: 10),
+                CircleAvatar(
+                  radius: 30,
+                  child: IconButton(
+                    icon: Icon(Icons.camera_alt),
+                    onPressed: () async {
+                      final uploaded = await uploadToCloudinary();
+                      if (uploaded != null) {
+                        profileimageUrl = uploaded;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Profile uploaded")));
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed")));
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(height: 10),
+                buildTextField("Name", namecont),
+                SizedBox(height: 10),
+                buildTextField("Phone Number", numbercont),
+                SizedBox(height: 10),
+                buildTextField("State", statecont),
+                SizedBox(height: 10),
+                buildTextField("District", districtcont),
+                SizedBox(height: 10),
+                buildTextField("Salary", salarycont),
+                SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedSection,
+                  decoration: InputDecoration(
+                    hintText: "Select Section",
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  items: [
+                    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering', 'Wire',
+                    'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+                  ]
+                      .map((section) => DropdownMenuItem(value: section, child: Text(section)))
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      selectedSection = val;
+                      sectioncont.text = val ?? '';
+                    });
+                  },
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: joincont,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    hintText: "Joining Date",
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.calendar_today),
+                      onPressed: () async {
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedJoiningDate ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2101),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            selectedJoiningDate = picked;
+                            joincont.text = picked.toIso8601String().split('T').first;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                SizedBox(height: 10),
+                buildTextField("Home Address", locationcont),
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: buildTextField("Latitude", latitudecont, number: true)),
+                    SizedBox(width: 10),
+                    Expanded(child: buildTextField("Longitude", longitudecont, number: true)),
+                  ],
+                ),
+                SizedBox(height: 10),
+                Text("Upload Identity Proof"),
+                CircleAvatar(
+                  radius: 30,
+                  child: IconButton(
+                    icon: Icon(Icons.image),
+                    onPressed: () async {
+                      final uploaded = await uploadToCloudinary();
+                      if (uploaded != null) {
+                        imageUrl = uploaded;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Document uploaded")));
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed")));
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Addemployee(
+                      name: namecont.text,
+                      number: numbercont.text,
+                      state: statecont.text,
+                      district: districtcont.text,
+                      salary: salarycont.text,
+                      section: sectioncont.text,
+                      joiningDate: joincont.text,
+                      context: context,
+                      imageUrl: imageUrl ?? "",
+                      profileimageUrl: profileimageUrl ?? "",
+                      location: locationcont.text,
+                      latitude: double.tryParse(latitudecont.text) ?? 0.0,
+                      longitude: double.tryParse(longitudecont.text) ?? 0.0,
+                    );
+
+                    namecont.clear();
+                    numbercont.clear();
+                    statecont.clear();
+                    salarycont.clear();
+                    districtcont.clear();
+                    locationcont.clear();
+                    latitudecont.clear();
+                    longitudecont.clear();
+                    selectedSection = null;
+                    joincont.clear();
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    minimumSize: Size(double.infinity, 45),
+                  ),
+                  child: Text("Add Employee", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -253,172 +357,133 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            "Employees",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          title: Text("Employees", style: TextStyle(fontWeight: FontWeight.bold)),
           backgroundColor: Colors.lightBlue,
           foregroundColor: Colors.white,
           bottom: TabBar(
-            onTap: (index) {
-              setState(() => currentTabIndex = index);
-            },
-            tabs: [
-              Tab(text: "All",),
+            onTap: (index) => setState(() => currentTabIndex = index),
+            tabs: const [
+              Tab(text: "All"),
               Tab(text: "Active"),
               Tab(text: "Inactive"),
             ],
           ),
           actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: DropdownButton<String>(
-                value: selectedSection,
-                hint: Text("Section", style: TextStyle(color: Colors.white)),
-                dropdownColor: Colors.white,
-                underline: SizedBox(),
-                icon: Icon(Icons.arrow_drop_down, color: Colors.white),
-                items: [
-                  DropdownMenuItem(value: null, child: Text("All")),
-                  ...[
-                    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-                    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
-                  ].map((section) => DropdownMenuItem(
-                        value: section,
-                        child: Text(section),
-                      )),
-                ],
-                onChanged: (value) {
-                  setState(() => selectedSection = value);
-                },
-              ),
+            DropdownButton<String>(
+              value: selectedSection,
+              hint: Text("Section", style: TextStyle(color: Colors.white)),
+              underline: SizedBox(),
+              dropdownColor: Colors.white,
+              icon: Icon(Icons.arrow_drop_down, color: Colors.white),
+              items: [
+                DropdownMenuItem(value: null, child: Text("All")),
+                ...['Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering', 'Wire',
+                  'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish']
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+              ],
+              onChanged: (val) => setState(() => selectedSection = val),
             ),
+            SizedBox(width: 12),
           ],
         ),
         drawer: Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(color: Colors.lightBlue),
-            child: Text("Menu", style: TextStyle(color: Colors.white, fontSize: 24)),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(color: Colors.lightBlue),
+                child: Text("Menu", style: TextStyle(color: Colors.white, fontSize: 24)),
+              ),
+              ListTile(
+                leading: Icon(Icons.person),
+                title: Text("Employees"),
+                onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: Icon(Icons.check_circle_outline),
+                title: Text("Mark Attendance"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => QRScanAttendanceScreendialogou()));
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.history),
+                title: Text("Attendance History"),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeQRDailyLogHistoryScreen()));
+                },
+              ),
+              Divider(),
+              ListTile(leading: Icon(Icons.payment),
+              title: Text("Payroll"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => GenerateAndViewPayrollScreen()));
+              },
+              ),
+              ListTile(
+                leading: Icon(Icons.markunread_mailbox_sharp),
+                title: Text('Mark Paid Leave'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => MarkPaidLeaveScreen()));
+                },
+              )
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Employees'),
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.check_circle_outline),
-            title: const Text('Mark Attendance'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => QRScanAttendanceScreendialogou(),
-                ),
-              );
-            },
-          ),
-          ListTile(
-        leading: Icon(Icons.history),
-        title: Text('Attendance History'),
-        onTap: () {
-          Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) =>EmployeeQRDailyLogHistoryScreen(),
-  ),
-);
-
-        },
-      ),
-        ],
-      ),
-    ),
+        ),
         body: Container(
           padding: EdgeInsets.all(10),
-          margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-          ),
           child: StreamBuilder(
             stream: getEmployees(section: selectedSection),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return Center(child: CircularProgressIndicator());
-              }
+              if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
 
               final docs = snapshot.data!.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 if (!data.containsKey('status')) return currentTabIndex == 0;
-                if (currentTabIndex == 1) return data['status'] == true;
-                if (currentTabIndex == 2) return data['status'] == false;
-                return true;
+                return (currentTabIndex == 1 && data['status'] == true) ||
+                    (currentTabIndex == 2 && data['status'] == false) ||
+                    currentTabIndex == 0;
               }).toList();
 
               return ListView.builder(
                 itemCount: docs.length,
                 itemBuilder: (context, index) {
-                  Employee emp = Employee.fromMap(
-                    docs[index].data() as Map<String, dynamic>,
-                  );
+                  Employee emp = Employee.fromMap(docs[index].data() as Map<String, dynamic>);
+                  return Card(
+                    elevation: 3,
+                    margin: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    child: ListTile(
+                      title: Text(emp.name, style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text("Section: ${emp.section}"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+  icon: const Icon(Icons.qr_code),
+  tooltip: "View QR & Share",
+  onPressed: () {
+    final employee = Employee.fromMap(docs[index].data() as Map<String, dynamic>);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EmployeeQrViewScreen(
+          employeeId: docs[index].id,
+          employeeName: employee.name,
+        ),
+      ),
+    );
+  },
+),
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EmployeeDetailPage(employee: emp),
-                        ),
-                      );
-                    },
-                    child: Card(
-                      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                          IconButton(onPressed: () => editbox(docs[index]), icon: Icon(Icons.edit)),
+                          IconButton(onPressed: () => deletemp(docs[index].id), icon: Icon(Icons.delete)),
+                        ],
                       ),
-                      child: ListTile(
-                        
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: () {
-                                editbox(docs[index]);
-                              },
-                              icon: Icon(Icons.edit),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                deletemp(docs[index].id);
-                              },
-                              icon: Icon(Icons.delete),
-                            ),
-                            IconButton(onPressed: (){
-                              showQrDialogWithSave(
-                                context: context,
-                                employeeId: docs[index].id,
-                                employeeName: emp.name,
-                              );
-                            }, icon: Icon(Icons.qr_code))
-                          ],
-                        ),
-                        title: Text(
-                          emp.name,
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          "section - ${emp.section}\n",
-                          
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EmployeeDetailPage(employee: emp))),
                     ),
                   );
                 },
@@ -426,202 +491,13 @@ bool isActive = data.containsKey('status') ? data['status'] : true;
             },
           ),
         ),
-      
-
         floatingActionButton: FloatingActionButton(
-  onPressed: () {
-    showDialog(
-      context: context,
-      builder: (context) {
-        String? imageUrl;
-        String? profileimageUrl;
-
-        return AlertDialog(
-          title: Text(
-            "Add employee details",
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
-            ),
-          ),
-          content: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.8,
-              maxWidth: 400, // optional fixed width
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    child: IconButton(
-                      onPressed: () async {
-                        final uploaded = await uploadToCloudinary();
-                        if (uploaded != null) {
-                          profileimageUrl = uploaded;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Image uploaded")),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Failed to upload image")),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.camera_alt),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  buildTextField("Name", namecont),
-                  SizedBox(height: 5,),
-                  buildTextField("Phone number", numbercont),
-                  SizedBox(height: 5),
-                  buildTextField("State", statecont),
-                  SizedBox(height: 5),
-                  buildTextField("District", districtcont),
-                  SizedBox(height: 5),
-                  buildTextField("Salary", salarycont),
-                  SizedBox(height: 5),
-                  DropdownButtonFormField<String>(
-                    value: selectedSection,
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        selectedSection = newValue;
-                        sectioncont.text = newValue ?? '';
-                      });
-                    },
-                    items: [
-                      'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-                      'Wire', 'Joint', 'V chain', 'Cutting',
-                      'Box chain', 'Polish',
-                    ].map((section) => DropdownMenuItem(
-                      value: section,
-                      child: Text(section),
-                    )).toList(),
-                    decoration: InputDecoration(
-                      hintText: "Select Section",
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  SizedBox(height: 5),
-                  TextField(
-                    controller: joincont,
-                    decoration: InputDecoration(
-                      hintText: 'Joining date',
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(Icons.calendar_today),
-                        onPressed: () async {
-                          DateTime? pickedDate = await showDatePicker(
-                            context: context,
-                            initialDate: selectedJoiningDate ?? DateTime.now(),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2101),
-                          );
-                          if (pickedDate != null) {
-                            setState(() {
-                              selectedJoiningDate = pickedDate;
-                              joincont.text =
-                                  pickedDate.toLocal().toString().split(' ')[0];
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 5),
-                  buildTextField("Home Address", locationcont),
-                  SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Expanded(child: buildTextField("Latitude", latitudecont,  )),
-                      SizedBox(width: 5),
-                      Expanded(child: buildTextField("Longitude", longitudecont, )),
-                    ],
-                  ),
-                  SizedBox(height: 5),
-                  Text("Upload identity proof ↓"),
-                  CircleAvatar(
-                    child: IconButton(
-                      onPressed: () async {
-                        final uploaded = await uploadToCloudinary();
-                        if (uploaded != null) {
-                          imageUrl = uploaded;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Image uploaded")),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Failed to upload image")),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.image),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    width: 160,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Addemployee(
-                          name: namecont.text,
-                          number: numbercont.text,
-                          state: statecont.text,
-                          district: districtcont.text,
-                          salary: salarycont.text,
-                          section: sectioncont.text,
-                          joiningDate: joincont.text,
-                          context: context,
-                          imageUrl: imageUrl ?? "",
-                          profileimageUrl: profileimageUrl ?? "",
-                          location: locationcont.text,
-                          latitude: double.tryParse(latitudecont.text) ?? 0.0,
-                          longitude: double.tryParse(longitudecont.text) ?? 0.0,
-                        );
-                        // Clear fields
-                        namecont.clear();
-                        numbercont.clear();
-                        statecont.clear();
-                        salarycont.clear();
-                        districtcont.clear();
-                        locationcont.clear();
-                        latitudecont.clear();
-                        longitudecont.clear();
-                        selectedSection = null;
-                        joincont.clear();
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text(
-                        "Add Employee",
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  },
-  child: Icon(Icons.add),
-  backgroundColor: Colors.blue,
-  foregroundColor: Colors.white,
-)
-
-
+          onPressed: showAddEmployeeDialog,
+          child: Icon(Icons.add),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+        ),
+        
       ),
     );
   }

@@ -1,4 +1,5 @@
 class Employee {
+  
   final String name;
   final String number;
   final String state;
@@ -11,6 +12,7 @@ class Employee {
   final double longitude;
 
   Employee({
+    
     required this.name,
     required this.number,
     required this.state,
@@ -25,6 +27,7 @@ class Employee {
 
   factory Employee.fromMap(Map<String, dynamic> data) {
     return Employee(
+      
       name: data['name'] ?? '',
       number: data['number'] ?? '',
       state: data['state'] ?? '',
