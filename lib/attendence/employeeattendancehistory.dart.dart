@@ -21,7 +21,6 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
   Map<String, String> employeeNames = {};
   List<Map<String, dynamic>> currentVisibleLogs = [];
 
-
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
 
   Future<void> pickDate(BuildContext context) async {
@@ -38,52 +37,65 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
   }
 
   Widget buildLogList(List logs) {
-    if (logs.isEmpty) return const Text("No logs");
+  if (logs.isEmpty) return const Text("No logs");
 
-    logs.sort((a, b) {
-      final timeA = DateFormat('hh:mm a').parse(a['time']);
-      final timeB = DateFormat('hh:mm a').parse(b['time']);
-      return timeA.compareTo(timeB);
-    });
+  logs.removeWhere((log) => log['time'] == null); // 🚨 Prevent parsing null
 
-    final inLogs = logs.where((log) => log['type'] == 'In').toList();
-    final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+  logs.sort((a, b) {
+    final timeA = DateFormat('hh:mm a').parse(a['time']);
+    final timeB = DateFormat('hh:mm a').parse(b['time']);
+    return timeA.compareTo(timeB);
+  });
 
-    final inTimes = inLogs.map((log) => log['time']).join(', ');
-    final outTimes = outLogs.map((log) => log['time']).join(', ');
+  final inLogs = logs.where((log) => log['type'] == 'In').toList();
+  final outLogs = logs.where((log) => log['type'] == 'Out').toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (inLogs.isNotEmpty)
-          Text("In: $inTimes", style: const TextStyle(color: Colors.green)),
-        if (outLogs.isNotEmpty)
-          Text("Out: $outTimes", style: const TextStyle(color: Colors.red)),
-      ],
-    );
+  final inTimes = inLogs.map((log) => log['time']).join(', ');
+  final outTimes = outLogs.map((log) => log['time']).join(', ');
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (inLogs.isNotEmpty)
+        Text("In: $inTimes", style: const TextStyle(color: Colors.green)),
+      if (outLogs.isNotEmpty)
+        Text("Out: $outTimes", style: const TextStyle(color: Colors.red)),
+    ],
+  );
+}
+
+
+ Duration calculateTotalDuration(List logs) {
+  if (logs.isEmpty) return Duration.zero;
+
+  // Filter valid logs
+  final inLog = logs.firstWhere(
+    (log) => log['type'] == 'In' && log['time'] != null,
+    orElse: () => <String, dynamic>{},
+  );
+
+  final outLog = logs.firstWhere(
+    (log) => log['type'] == 'Out' && log['time'] != null,
+    orElse: () => <String, dynamic>{},
+  );
+
+  final timeFormat = DateFormat('hh:mm a');
+
+  try {
+    final checkInTime = timeFormat.parse(inLog['time']);
+    final checkOutTime = timeFormat.parse(outLog['time']);
+
+    // ✅ Add one day if check-out is on next day (e.g., night shift)
+    final adjustedOutTime = checkOutTime.isBefore(checkInTime)
+        ? checkOutTime.add(Duration(days: 1))
+        : checkOutTime;
+
+    return adjustedOutTime.difference(checkInTime);
+  } catch (e) {
+    return Duration.zero;
   }
+}
 
-  Duration calculateTotalDuration(List logs) {
-    logs.sort((a, b) {
-      final timeA = DateFormat('hh:mm a').parse(a['time']);
-      final timeB = DateFormat('hh:mm a').parse(b['time']);
-      return timeA.compareTo(timeB);
-    });
-
-    final inLogs = logs.where((log) => log['type'] == 'In').toList();
-    final outLogs = logs.where((log) => log['type'] == 'Out').toList();
-
-    int count = min(inLogs.length, outLogs.length);
-    Duration total = Duration.zero;
-
-    for (int i = 0; i < count; i++) {
-      final inTime = DateFormat('hh:mm a').parse(inLogs[i]['time']);
-      final outTime = DateFormat('hh:mm a').parse(outLogs[i]['time']);
-      total += outTime.difference(inTime);
-    }
-
-    return total;
-  }
 
   String formatDuration(Duration duration) {
     int hours = duration.inHours;
@@ -105,7 +117,23 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
             onPressed: () async {
-              await generateAttendancePdf(title: "$viewType Attendance: ${formattedDate}", logs:currentVisibleLogs,viewType: viewType);
+              // Summary calculation
+              Map<String, Duration> summaryMap = {};
+              for (var record in currentVisibleLogs) {
+                final name = record['name'];
+                final logs = List<Map<String, dynamic>>.from(record['logs']);
+                final duration = calculateTotalDuration(logs);
+                summaryMap[name] = (summaryMap[name] ?? Duration.zero) + duration;
+              }
+
+              await generateAttendancePdf(
+                title: "$viewType Attendance: $formattedDate",
+                logs: currentVisibleLogs,
+                viewType: viewType,
+                summary: viewType != 'Daily'
+                    ? summaryMap.map((name, dur) => MapEntry(name, formatDuration(dur)))
+                    : null,
+              );
             },
           ),
         ],
@@ -155,6 +183,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
 
                 final history = snapshot.data ?? {};
                 currentVisibleLogs = history.values.expand((e) => e).toList();
+
                 if (history.isEmpty) {
                   return const Center(child: Text("No attendance records found."));
                 }
@@ -162,48 +191,77 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                 final sortedDates = history.keys.toList()
                   ..sort((a, b) => b.compareTo(a));
 
-                return ListView.builder(
-                  itemCount: sortedDates.length,
-                  itemBuilder: (context, index) {
-                    final date = sortedDates[index];
-                    final records = history[date]!;
+                // Calculate summary map for Weekly/Monthly
+                Map<String, Duration> summaryMap = {};
+                for (var record in currentVisibleLogs) {
+                  final name = record['name'];
+                  final logs = List<Map<String, dynamic>>.from(record['logs']);
+                  final duration = calculateTotalDuration(logs);
+                  summaryMap[name] = (summaryMap[name] ?? Duration.zero) + duration;
+                }
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          color: Colors.grey.shade200,
-                          width: double.infinity,
-                          child: Text(
-                            DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(date)),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        ...records.map((record) {
-                          final logs = List<Map<String, dynamic>>.from(record['logs']);
-                          final totalDuration = calculateTotalDuration(logs);
-
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundImage: (record['profileImageUrl'] as String).isNotEmpty
-                                  ? NetworkImage(record['profileImageUrl'])
-                                  : null,
-                              child: (record['profileImageUrl'] as String).isEmpty
-                                  ? Text(record['name'][0])
-                                  : null,
+                return ListView(
+                  children: [
+                    for (final date in sortedDates)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            color: Colors.grey.shade200,
+                            width: double.infinity,
+                            child: Text(
+                              DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(date)),
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            title: Text(record['name']),
-                            subtitle: buildLogList(logs),
-                            trailing: viewType == 'Daily'
-                                ? Text(formatDuration(totalDuration),
-                                    style: const TextStyle(fontWeight: FontWeight.bold))
-                                : null,
-                          );
-                        }),
-                      ],
-                    );
-                  },
+                          ),
+                          ...history[date]!.map((record) {
+                            final logs = List<Map<String, dynamic>>.from(record['logs']);
+                            final totalDuration = calculateTotalDuration(logs);
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundImage: (record['profileImageUrl'] as String).isNotEmpty
+                                    ? NetworkImage(record['profileImageUrl'])
+                                    : null,
+                                child: (record['profileImageUrl'] as String).isEmpty
+                                    ? Text(record['name'][0])
+                                    : null,
+                              ),
+                              title: Text(record['name']),
+                              subtitle: buildLogList(logs),
+                              trailing: viewType == 'Daily'
+                                  ? Text(formatDuration(totalDuration),
+                                      style: const TextStyle(fontWeight: FontWeight.bold))
+                                  : null,
+                            );
+                          }),
+                        ],
+                      ),
+                    if (viewType != 'Daily')
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Divider(),
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text(
+                              "Summary (Total Duration per Employee)",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                          ...summaryMap.entries.map((entry) {
+                            return ListTile(
+                              title: Text(entry.key),
+                              trailing: Text(
+                                formatDuration(entry.value),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                  ],
                 );
               },
             ),

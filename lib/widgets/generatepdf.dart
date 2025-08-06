@@ -1,89 +1,147 @@
+import 'dart:typed_data';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/intl.dart';
 
 Future<void> generateAttendancePdf({
   required String title,
   required List<Map<String, dynamic>> logs,
-  String viewType = 'Daily',
+  required String viewType, // 'Daily', 'Weekly', 'Monthly'
+  Map<String, String>? summary, // Used for Weekly/Monthly view
 }) async {
   final pdf = pw.Document();
+  final dateFormat = DateFormat('hh:mm a');
+
+  DateTime _parseTime(String timeStr, DateTime fallbackDate) {
+    try {
+      final parsedTime = dateFormat.parse(timeStr);
+      return DateTime(
+        fallbackDate.year,
+        fallbackDate.month,
+        fallbackDate.day,
+        parsedTime.hour,
+        parsedTime.minute,
+      );
+    } catch (_) {
+      return fallbackDate;
+    }
+  }
+
+  String formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    return '${hours}h ${minutes}m';
+  }
 
   pdf.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      build: (context) => [
-        pw.Text(title, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 16),
-        pw.Table.fromTextArray(
-          headers: [
-            'Employee Name',
-            'Check-In(s)',
-            'Check-Out(s)',
-            if (viewType == 'Daily') 'Total Hours',
-          ],
-          data: logs.map((record) {
-            final name = record['name'] ?? 'Unknown';
-            final logList = List<Map<String, dynamic>>.from(record['logs'] ?? []);
+      build: (context) {
+        List<pw.Widget> content = [
+          pw.Text(title, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 12),
+        ];
 
-            logList.sort((a, b) {
-              final timeA = DateFormat('hh:mm a').parse(a['time']);
-              final timeB = DateFormat('hh:mm a').parse(b['time']);
-              return timeA.compareTo(timeB);
-            });
+        if (viewType == 'Daily') {
+          for (final entry in logs) {
+            final name = entry['name'] ?? '-';
+            final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
+            final fallbackDate = DateTime.now(); // Adjust if needed
 
-            final inLogs = logList
-                .where((log) => log['type'] == 'In')
-                .map((log) => log['time'])
-                .join(', ');
-            final outLogs = logList
-                .where((log) => log['type'] == 'Out')
-                .map((log) => log['time'])
+            final checkIns = rawLogs
+                .where((e) => e['type'] == 'In')
+                .map((e) => e['time'] ?? '-')
                 .join(', ');
 
-            String total = '';
-            if (viewType == 'Daily') {
-              total = _calculateTotalDurationFormatted(logList);
+            final checkOuts = rawLogs
+                .where((e) => e['type'] == 'Out')
+                .map((e) => e['time'] ?? '-')
+                .join(', ');
+
+            Duration workedDuration = Duration.zero;
+
+            final inLog = rawLogs.firstWhere((e) => e['type'] == 'In', orElse: () => {});
+            final outLog = rawLogs.firstWhere((e) => e['type'] == 'Out', orElse: () => {});
+
+            if (inLog.isNotEmpty && outLog.isNotEmpty) {
+              final inTime = _parseTime(inLog['time'], fallbackDate);
+              final outTime = _parseTime(outLog['time'], fallbackDate);
+              workedDuration = outTime.difference(inTime);
             }
 
-            return [
-              name,
-              inLogs,
-              outLogs,
-              if (viewType == 'Daily') total,
-            ];
-          }).toList(),
-        ),
-      ],
+            content.add(
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Name: $name', style: const pw.TextStyle(fontSize: 14)),
+                    pw.Text('Check In: $checkIns', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text('Check Out: $checkOuts', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text('Total Hours: ${formatDuration(workedDuration)}',
+                        style: const pw.TextStyle(fontSize: 12)),
+                    pw.Divider(),
+                  ],
+                ),
+              ),
+            );
+          }
+        } else {
+          // Weekly / Monthly: Show only name and total worked hours
+          summary?.forEach((name, totalDuration) {
+            content.add(
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(name, style: const pw.TextStyle(fontSize: 14)),
+                    pw.Text('Total: $totalDuration', style: const pw.TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
+            );
+          });
+        }
+
+        return content;
+      },
     ),
   );
 
-  await Printing.layoutPdf(onLayout: (format) => pdf.save());
+  await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
 }
 
-/// Place this BELOW the above function
-String _calculateTotalDurationFormatted(List<Map<String, dynamic>> logs) {
-  logs.sort((a, b) {
-    final timeA = DateFormat('hh:mm a').parse(a['time']);
-    final timeB = DateFormat('hh:mm a').parse(b['time']);
-    return timeA.compareTo(timeB);
-  });
+String calculateTotalDurationFormatted(List<Map<String, dynamic>> logs) {
+  Duration total = Duration();
 
-  final inLogs = logs.where((log) => log['type'] == 'In').toList();
-  final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+  final ins = logs.where((log) => log['type'] == 'In').toList();
+  final outs = logs.where((log) => log['type'] == 'Out').toList();
 
-  int count = inLogs.length < outLogs.length ? inLogs.length : outLogs.length;
-  Duration total = Duration.zero;
+  int pairs = ins.length < outs.length ? ins.length : outs.length;
 
-  for (int i = 0; i < count; i++) {
-    final inTime = DateFormat('hh:mm a').parse(inLogs[i]['time']);
-    final outTime = DateFormat('hh:mm a').parse(outLogs[i]['time']);
-    total += outTime.difference(inTime);
+  for (int i = 0; i < pairs; i++) {
+    try {
+      final inTime = parseTimeString(logs[i * 2]['time']);
+      final outTime = parseTimeString(logs[i * 2 + 1]['time']);
+
+      total += outTime.difference(inTime);
+    } catch (_) {
+      continue;
+    }
   }
 
-  int hours = total.inHours;
-  int minutes = total.inMinutes.remainder(60);
+  return formatDuration(total);
+}
 
-  return '${hours}h ${minutes}m';
+DateTime parseTimeString(String timeStr) {
+  final now = DateTime.now();
+  final parsedTime = DateFormat('hh:mm a').parse(timeStr);
+  return DateTime(now.year, now.month, now.day, parsedTime.hour, parsedTime.minute);
+}
+
+String formatDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m';
 }

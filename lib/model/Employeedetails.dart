@@ -7,6 +7,8 @@ class Employee {
   final String section;
   final String imageUrl;
   final String profileImageUrl;
+  final String district;
+  final String joiningDate;
   final String location;
   final double latitude;
   final double longitude;
@@ -20,6 +22,8 @@ class Employee {
     required this.section,
     required this.imageUrl,
     required this.profileImageUrl,
+    required this.district,
+    required this.joiningDate,
     required this.location,
     required this.latitude,
     required this.longitude,
@@ -35,6 +39,8 @@ class Employee {
       section: data['section'] ?? '',
       imageUrl: data['image'] ?? '',
       profileImageUrl: data['profileimage'] ?? '',
+      district: data['district'] ?? '',
+      joiningDate: data['joiningDate'],
       location: data['location'] ?? '',
       latitude: data['latitude']?.toDouble() ?? 0.0,
       longitude: data['longitude']?.toDouble() ?? 0.0,

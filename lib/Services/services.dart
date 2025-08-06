@@ -1,13 +1,17 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../model/kpi_models.dart';
+import 'section_shift_service.dart';
 
 Future<void> Addemployee({
   required String name,
@@ -60,43 +64,43 @@ Future<void> Addemployee({
     ).showSnackBar(SnackBar(content: Text(e.toString())));
   }
 }
-Future<String?> uploadToCloudinary() async {
-  final cloudName = 'dzfr5nkxt';
-  final uploadPreset = 'employee_images';
-  final url = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
-
+Future<String?> uploadToFirebaseStorage() async {
   Uint8List? imageBytes;
   String fileName;
 
-  if (kIsWeb) {
-    final result = await FilePicker.platform.pickFiles(withData: true, type: FileType.image);
-    if (result == null || result.files.single.bytes == null) return null;
-    imageBytes = result.files.single.bytes!;
-    fileName = result.files.single.name;
-  } else {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return null;
-    imageBytes = await pickedFile.readAsBytes();
-    fileName = pickedFile.name;
-  }
+  try {
+    if (kIsWeb) {
+      // Web image picker
+      final result = await FilePicker.platform.pickFiles(
+        withData: true,
+        type: FileType.image,
+      );
+      if (result == null || result.files.single.bytes == null) return null;
 
-  final request = http.MultipartRequest('POST', url)
-    ..fields['upload_preset'] = uploadPreset
-    ..files.add(http.MultipartFile.fromBytes(
-      'file',
-      imageBytes,
-      filename: fileName,
-    ));
+      imageBytes = result.files.single.bytes!;
+      fileName = result.files.single.name;
+    } else {
+      // Mobile image picker
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.camera);
+      if (pickedFile == null) return null;
 
-  final response = await request.send();
-  final responseBody = await response.stream.bytesToString();
+      final File file = File(pickedFile.path);
+      imageBytes = await file.readAsBytes();
+      fileName = pickedFile.name;
+    }
 
-  if (response.statusCode == 200) {
-    final data = json.decode(responseBody);
-    return data['secure_url'];
-  } else {
-    print("Upload failed: ${response.reasonPhrase}");
+    // Create unique storage path
+    final String path = 'employee_images/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+
+    // Upload to Firebase Storage
+    final ref = FirebaseStorage.instance.ref().child(path);
+    final uploadTask = await ref.putData(imageBytes);
+    final downloadUrl = await uploadTask.ref.getDownloadURL();
+
+    return downloadUrl;
+  } catch (e) {
+    print("Upload to Firebase failed: $e");
     return null;
   }
 }
@@ -122,6 +126,7 @@ Future<void> updateemployee({
   required double latitude,
   required double longitude,
   required bool isActive,
+  required bool notify,
   required BuildContext context,
 }) async {
   try {
@@ -135,6 +140,7 @@ Future<void> updateemployee({
       "latitude": latitude, 
       "longitude": longitude,
       'status': isActive,
+      'notify':notify,
     });
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -159,8 +165,19 @@ Future<void> updateemployee({
 
 Future<void> markQRAttendance(String employeeId, String type) async {
   final now = DateTime.now();
-  final date = DateFormat('yyyy-MM-dd').format(now);
   final time = DateFormat('hh:mm a').format(now);
+
+  // Calculate 4PM-based shift date
+  DateTime shiftDate;
+  if (now.hour < 16) {
+    // Before 4PM = previous day's shift
+    shiftDate = DateTime(now.year, now.month, now.day - 1, 16);
+  } else {
+    // 4PM or after = current day's shift
+    shiftDate = DateTime(now.year, now.month, now.day, 16);
+  }
+
+  final date = DateFormat('yyyy-MM-dd').format(shiftDate);
 
   final empDoc = await FirebaseFirestore.instance
       .collection('Employees')
@@ -277,13 +294,36 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
       final name = data['name'] ?? employeeNames[doc.id] ?? 'Unknown';
       final profileImageUrl = data['profileImageUrl'] ?? '';
 
+      // ✅ Type-safe fallback for missing check-in/out logs
+      final checkInLog = logs.firstWhere(
+        (log) => log['type'] == 'Check In',
+        orElse: () => <String, dynamic>{},
+      );
+      final checkOutLog = logs.firstWhere(
+        (log) => log['type'] == 'Check Out',
+        orElse: () => <String, dynamic>{},
+      );
+
+      final checkInTime = DateTime.tryParse(checkInLog['time'] ?? '');
+      final checkOutTime = DateTime.tryParse(checkOutLog['time'] ?? '');
+
+      Duration totalDuration = Duration.zero;
+      if (checkInTime != null && checkOutTime != null && checkOutTime.isAfter(checkInTime)) {
+        totalDuration = checkOutTime.difference(checkInTime);
+      }
+
       dayRecords.add({
         'name': name,
         'profileImageUrl': profileImageUrl,
         'logs': logs,
+        'checkIn': checkInTime?.toIso8601String(),
+        'checkOut': checkOutTime?.toIso8601String(),
+        'totalHours': totalDuration.inHours,
+        'totalMinutes': totalDuration.inMinutes % 60,
+        'formattedDuration': _formatDuration(totalDuration),
       });
 
-      // Optional: Save employee name in map for dropdown usage
+      // Cache name
       if (!employeeNames.containsKey(doc.id)) {
         employeeNames[doc.id] = name;
       }
@@ -295,6 +335,12 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
   }
 
   return history;
+}
+
+String _formatDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  return '${hours}h ${minutes}m';
 }
 
 Future<void> generatePayrollForMonth(String monthYear) async {
@@ -316,53 +362,47 @@ Future<void> generatePayrollForMonth(String monthYear) async {
     int workingDays = 0;
 
     for (int day = 1; day <= totalDaysInMonth; day++) {
-  final date = DateTime(year, month, day);
-  final shiftStart = DateTime(date.year, date.month, date.day, 16); // 4 PM
-  final shiftEnd = shiftStart.add(const Duration(hours: 24)); // Next day 4 PM
+      final date = DateTime(year, month, day);
+      final shiftStart = DateTime(date.year, date.month, date.day, 16);
 
-  // 🛑 Skip if the shift starts on Sunday (before Monday 4 PM)
-  if (shiftStart.weekday == DateTime.sunday) continue;
+      // ✅ Skip Sunday 4PM–Monday 4PM shifts (company holiday)
+      if (shiftStart.weekday == DateTime.sunday) continue;
 
-  // 🛑 Skip if the shift ends on Monday before 4 PM (holiday period)
-  final isHoliday = shiftEnd.weekday == DateTime.monday && shiftEnd.hour < 16;
-  if (isHoliday) continue;
+      workingDays++;
 
-  workingDays++;
+      final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
 
-  final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
+      final attendanceDoc = await _firestore
+          .collection('attendance')
+          .doc(formatted)
+          .collection('records')
+          .doc(empId)
+          .get();
 
-  final attendanceDoc = await _firestore
-      .collection('attendance')
-      .doc(formatted)
-      .collection('records')
-      .doc(empId)
-      .get();
+      final paidLeaveDoc = await _firestore
+          .collection('paid_leaves')
+          .doc(formatted)
+          .collection('Employees')
+          .doc(empId)
+          .get();
 
-  final paidLeaveDoc = await _firestore
-      .collection('paid_leaves')
-      .doc(formatted)
-      .collection('Employees')
-      .doc(empId)
-      .get();
+      if (attendanceDoc.exists) {
+        final logs = List.from(attendanceDoc.data()?['logs'] ?? []);
+        final inLog = logs.any((log) => log['type'] == 'In');
+        final outLog = logs.any((log) => log['type'] == 'Out');
 
-  if (attendanceDoc.exists) {
-    final logs = List.from(attendanceDoc.data()?['logs'] ?? []);
-    final inLog = logs.any((log) => log['type'] == 'In');
-    final outLog = logs.any((log) => log['type'] == 'Out');
-
-    if (inLog && outLog) {
-      presentDays++;
-      continue;
+        if (inLog && outLog) {
+          presentDays++;
+        } else if (paidLeaveDoc.exists) {
+          paidLeaves++;
+        }
+      } else if (paidLeaveDoc.exists) {
+        paidLeaves++;
+      }
     }
-  }
-
-  if (paidLeaveDoc.exists) {
-    paidLeaves++;
-  }
-}
 
     final absentDays = workingDays - presentDays - paidLeaves;
-    final dailyRate = salary / workingDays;
+    final dailyRate = workingDays > 0 ? salary / workingDays : 0;
     final deduction = dailyRate * absentDays;
     final finalSalary = salary - deduction;
 
@@ -390,11 +430,16 @@ Future<void> generatePayrollForMonth(String monthYear) async {
   }
 }
 
+
 Future<void> markPaidLeave(String employeeId, DateTime date, String reason) async {
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-  final formatted = DateFormat('yyyy-MM-dd').format(date);
+  // Align with 4PM shift-based day
+  DateTime shiftDate = get4PMShiftDate(date);
 
+  final formatted = DateFormat('yyyy-MM-dd').format(shiftDate);
+   final empDoc = await firestore.collection('Employees').doc(employeeId).get();
+  final employeeName = empDoc.data()?['name'] ?? 'Unknown';
   await firestore
       .collection('paid_leaves')
       .doc(formatted)
@@ -403,5 +448,486 @@ Future<void> markPaidLeave(String employeeId, DateTime date, String reason) asyn
       .set({
     'reason': reason,
     'markedAt': FieldValue.serverTimestamp(),
+    'employeename':employeeName
   });
 }
+
+Future<List<Map<String, dynamic>>> fetchPaidLeaveHistory({
+  required DateTime startDate,
+  required DateTime endDate,
+}) async {
+  List<Map<String, dynamic>> history = [];
+
+  final days = endDate.difference(startDate).inDays;
+  for (int i = 0; i <= days; i++) {
+    final date = startDate.add(Duration(days: i));
+    final formattedDate = DateFormat('yyyy-MM-dd').format(date);
+
+    final leaveSnapshot = await FirebaseFirestore.instance
+        .collection('paid_leaves')
+        .doc(formattedDate)
+        .collection('Employees')
+        .get();
+
+    for (var doc in leaveSnapshot.docs) {
+      final empId = doc.id;
+      final data = doc.data();
+
+      // Fetch employee name (optional, if not stored in leave doc)
+      final empDoc = await FirebaseFirestore.instance.collection('Employees').doc(empId).get();
+      final empName = empDoc.data()?['name'] ?? 'Unknown';
+
+      history.add({
+        'employeeId': empId,
+        'employeeName': empName,
+        'date': formattedDate,
+        'reason': data['reason'] ?? '',
+      });
+    }
+  }
+
+  return history;
+}
+
+// ==================== ATTENDANCE KPI CALCULATION FUNCTIONS ====================
+
+// Cache for employee data to avoid repeated Firestore calls
+final Map<String, Map<String, dynamic>> _employeeCache = {};
+
+/// OPTIMIZATION: Batch fetch attendance data for multiple dates
+Future<Map<String, Map<String, dynamic>>> _batchFetchAttendanceData(
+  String employeeId,
+  List<String> shiftDates
+) async {
+  final firestore = FirebaseFirestore.instance;
+  final Map<String, Map<String, dynamic>> attendanceData = {};
+
+  // Use Future.wait to fetch all attendance records concurrently
+  final futures = shiftDates.map((shiftDate) async {
+    try {
+      final doc = await firestore
+          .collection('attendance')
+          .doc(shiftDate)
+          .collection('records')
+          .doc(employeeId)
+          .get();
+
+      if (doc.exists) {
+        return MapEntry(shiftDate, doc.data()!);
+      }
+    } catch (e) {
+      print('Error fetching attendance for $shiftDate: $e');
+    }
+    return null;
+  });
+
+  final results = await Future.wait(futures);
+
+  for (final result in results) {
+    if (result != null) {
+      attendanceData[result.key] = result.value;
+    }
+  }
+
+  return attendanceData;
+}
+
+/// OPTIMIZATION: Batch fetch paid leave data for multiple dates
+Future<Map<String, bool>> _batchFetchPaidLeaveData(
+  String employeeId,
+  List<String> shiftDates
+) async {
+  final firestore = FirebaseFirestore.instance;
+  final Map<String, bool> paidLeaveData = {};
+
+  // Use Future.wait to fetch all paid leave records concurrently
+  final futures = shiftDates.map((shiftDate) async {
+    try {
+      final doc = await firestore
+          .collection('paid_leaves')
+          .doc(shiftDate)
+          .collection('Employees')
+          .doc(employeeId)
+          .get();
+
+      return MapEntry(shiftDate, doc.exists);
+    } catch (e) {
+      print('Error fetching paid leave for $shiftDate: $e');
+      return MapEntry(shiftDate, false);
+    }
+  });
+
+  final results = await Future.wait(futures);
+
+  for (final result in results) {
+    paidLeaveData[result.key] = result.value;
+  }
+
+  return paidLeaveData;
+}
+
+/// Optimized: Calculate attendance KPI for a specific employee (with batch queries and caching)
+Future<AttendanceKPI> calculateEmployeeAttendanceKPI({
+  required String employeeId,
+  required DateTime startDate,
+  required DateTime endDate,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+
+  // Get employee details from cache or Firestore
+  Map<String, dynamic> empData;
+  if (_employeeCache.containsKey(employeeId)) {
+    empData = _employeeCache[employeeId]!;
+  } else {
+    final empDoc = await firestore.collection('Employees').doc(employeeId).get();
+    empData = empDoc.data() ?? {};
+    _employeeCache[employeeId] = empData; // Cache for future use
+  }
+
+  final employeeName = empData['name'] ?? 'Unknown';
+  final section = empData['section'] ?? 'Unknown';
+
+  // Get section shift configuration
+  final sectionShift = SectionShiftService.getSectionShift(section);
+
+  // Calculate 4PM-based shift dates (align with payroll logic)
+  List<String> shiftDates = [];
+  DateTime currentDate = startDate;
+
+  while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
+    // Create 4PM shift date for this day
+    final shiftStart = DateTime(currentDate.year, currentDate.month, currentDate.day, 16);
+
+    // Skip Sunday 4PM–Monday 4PM shifts (company holiday - same as payroll)
+    if (shiftStart.weekday != DateTime.sunday) {
+      final shiftDateString = DateFormat('yyyy-MM-dd').format(shiftStart);
+      shiftDates.add(shiftDateString);
+    }
+
+    currentDate = currentDate.add(const Duration(days: 1));
+  }
+
+  // OPTIMIZATION: Batch fetch all attendance and paid leave data
+  final attendanceData = await _batchFetchAttendanceData(employeeId, shiftDates);
+  final paidLeaveData = await _batchFetchPaidLeaveData(employeeId, shiftDates);
+
+  int totalWorkingDays = shiftDates.length;
+  int presentDays = 0;
+  int absentDays = 0;
+  int lateArrivals = 0;
+  int onTimeArrivals = 0;
+  int earlyArrivals = 0;
+
+  for (final shiftDate in shiftDates) {
+    final attendanceRecord = attendanceData[shiftDate];
+
+    if (attendanceRecord != null) {
+      final logs = List<Map<String, dynamic>>.from(attendanceRecord['logs'] ?? []);
+
+      final checkInLog = logs.firstWhere(
+        (log) => log['type'] == 'Check In',
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (checkInLog.isNotEmpty) {
+        presentDays++;
+
+        // Check punctuality and early arrival based on section shift
+        final checkInTime = checkInLog['time'] as String;
+
+        if (SectionShiftService.isEmployeeLate(checkInTime, sectionShift)) {
+          lateArrivals++;
+        } else {
+          onTimeArrivals++;
+
+          // Check if employee arrived early (bonus point)
+          if (SectionShiftService.isEmployeeEarly(checkInTime, sectionShift)) {
+            earlyArrivals++;
+          }
+        }
+      }
+    } else {
+      // Check for paid leave from batched data
+      if (!paidLeaveData.containsKey(shiftDate)) {
+        absentDays++;
+      }
+    }
+  }
+
+  // Calculate KPI metrics
+  final attendanceRate = totalWorkingDays > 0 ? (presentDays / totalWorkingDays) * 100 : 0.0;
+  final punctualityRate = presentDays > 0 ? (onTimeArrivals / presentDays) * 100 : 0.0;
+  final earlyArrivalRate = presentDays > 0 ? (earlyArrivals / presentDays) * 100 : 0.0;
+
+  return AttendanceKPI(
+    employeeId: employeeId,
+    employeeName: employeeName,
+    section: section,
+    attendanceRate: attendanceRate,
+    punctualityRate: punctualityRate,
+    earlyArrivalRate: earlyArrivalRate,
+    totalWorkingDays: totalWorkingDays,
+    presentDays: presentDays,
+    absentDays: absentDays,
+    lateArrivals: lateArrivals,
+    onTimeArrivals: onTimeArrivals,
+    earlyArrivals: earlyArrivals,
+    calculationPeriodStart: startDate,
+    calculationPeriodEnd: endDate,
+    sectionShift: sectionShift,
+  );
+}
+
+/// OPTIMIZED: Calculate section-wise attendance summary (with parallel processing)
+Future<SectionAttendanceSummary> calculateSectionAttendanceSummary({
+  required String sectionName,
+  required DateTime startDate,
+  required DateTime endDate,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+
+  // Get section shift configuration
+  final sectionShift = SectionShiftService.getSectionShift(sectionName);
+
+  // Get all employees in the section
+  final employeeSnapshot = await firestore
+      .collection('Employees')
+      .where('section', isEqualTo: sectionName)
+      .get();
+
+  // OPTIMIZATION: Calculate all employee KPIs in parallel instead of sequentially
+  final futures = employeeSnapshot.docs.map((empDoc) =>
+    calculateEmployeeAttendanceKPI(
+      employeeId: empDoc.id,
+      startDate: startDate,
+      endDate: endDate,
+    )
+  );
+
+  final employeeKPIs = await Future.wait(futures);
+
+  double totalAttendanceRate = 0.0;
+  double totalPunctualityRate = 0.0;
+  double totalEarlyArrivalRate = 0.0;
+  int presentEmployees = 0;
+
+  for (final empKPI in employeeKPIs) {
+    if (empKPI.presentDays > 0) {
+      presentEmployees++;
+      totalAttendanceRate += empKPI.attendanceRate;
+      totalPunctualityRate += empKPI.punctualityRate;
+      totalEarlyArrivalRate += empKPI.earlyArrivalRate;
+    }
+  }
+
+  final sectionAttendanceRate = presentEmployees > 0 ? totalAttendanceRate / presentEmployees : 0.0;
+  final sectionPunctualityRate = presentEmployees > 0 ? totalPunctualityRate / presentEmployees : 0.0;
+  final sectionEarlyArrivalRate = presentEmployees > 0 ? totalEarlyArrivalRate / presentEmployees : 0.0;
+
+  return SectionAttendanceSummary(
+    sectionName: sectionName,
+    sectionShift: sectionShift,
+    sectionAttendanceRate: sectionAttendanceRate,
+    sectionPunctualityRate: sectionPunctualityRate,
+    sectionEarlyArrivalRate: sectionEarlyArrivalRate,
+    totalEmployees: employeeSnapshot.docs.length,
+    presentEmployees: presentEmployees,
+    employeeKPIs: employeeKPIs,
+    calculationPeriodStart: startDate,
+    calculationPeriodEnd: endDate,
+  );
+}
+
+// Cache for KPI data to avoid recalculation
+final Map<String, Map<String, dynamic>> _kpiCache = {};
+
+/// OPTIMIZED: Get attendance KPI data with caching and parallel processing
+Future<Map<String, dynamic>> getAttendanceKPIData(KPIFilter filter) async {
+  // Create cache key based on filter parameters
+  final cacheKey = '${filter.employeeId ?? 'all'}_${filter.department ?? 'all'}_${filter.startDate.toIso8601String()}_${filter.endDate.toIso8601String()}';
+
+  // Check cache first
+  if (_kpiCache.containsKey(cacheKey)) {
+    final cachedData = _kpiCache[cacheKey]!;
+    final cacheTime = DateTime.parse(cachedData['cacheTime']);
+
+    // Use cached data if it's less than 5 minutes old
+    if (DateTime.now().difference(cacheTime).inMinutes < 5) {
+      return {
+        'type': cachedData['type'],
+        'data': cachedData['data'],
+        'cached': true,
+      };
+    }
+  }
+
+  Map<String, dynamic> result;
+
+  if (filter.employeeId != null) {
+    // Individual employee KPI
+    final employeeKPI = await calculateEmployeeAttendanceKPI(
+      employeeId: filter.employeeId!,
+      startDate: filter.startDate,
+      endDate: filter.endDate,
+    );
+    result = {'type': 'employee', 'data': employeeKPI};
+  } else if (filter.department != null) {
+    // Section KPI
+    final sectionKPI = await calculateSectionAttendanceSummary(
+      sectionName: filter.department!,
+      startDate: filter.startDate,
+      endDate: filter.endDate,
+    );
+    result = {'type': 'section', 'data': sectionKPI};
+  } else {
+    // OPTIMIZATION: Calculate all sections in parallel
+    final sections = ['Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering', 'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'];
+
+    final futures = sections.map((section) =>
+      calculateSectionAttendanceSummary(
+        sectionName: section,
+        startDate: filter.startDate,
+        endDate: filter.endDate,
+      )
+    );
+
+    final sectionSummaries = await Future.wait(futures);
+    result = {'type': 'all_sections', 'data': sectionSummaries};
+  }
+
+  // Cache the result
+  _kpiCache[cacheKey] = {
+    'type': result['type'],
+    'data': result['data'],
+    'cacheTime': DateTime.now().toIso8601String(),
+  };
+
+  // Clean old cache entries (keep only last 10)
+  if (_kpiCache.length > 10) {
+    final oldestKey = _kpiCache.keys.first;
+    _kpiCache.remove(oldestKey);
+  }
+
+  return result;
+}
+
+/// Clear KPI cache (useful when data is updated)
+void clearKPICache() {
+  _kpiCache.clear();
+  _employeeCache.clear();
+}
+
+/// OPTIMIZATION: Preload all employee data to cache
+Future<void> preloadEmployeeData() async {
+  final firestore = FirebaseFirestore.instance;
+
+  try {
+    final employeeSnapshot = await firestore.collection('Employees').get();
+
+    for (final doc in employeeSnapshot.docs) {
+      _employeeCache[doc.id] = doc.data();
+    }
+
+    print('Preloaded ${employeeSnapshot.docs.length} employees to cache');
+  } catch (e) {
+    print('Error preloading employee data: $e');
+  }
+}
+
+/// OPTIMIZATION: Batch fetch attendance data for multiple employees and dates
+Future<Map<String, Map<String, Map<String, dynamic>>>> _batchFetchMultipleEmployeeAttendance(
+  List<String> employeeIds,
+  List<String> shiftDates,
+) async {
+  final firestore = FirebaseFirestore.instance;
+  final Map<String, Map<String, Map<String, dynamic>>> allAttendanceData = {};
+
+  // Initialize the nested map structure
+  for (final employeeId in employeeIds) {
+    allAttendanceData[employeeId] = {};
+  }
+
+  // Create futures for all combinations of employees and dates
+  final futures = <Future<void>>[];
+
+  for (final shiftDate in shiftDates) {
+    futures.add(() async {
+      try {
+        final snapshot = await firestore
+            .collection('attendance')
+            .doc(shiftDate)
+            .collection('records')
+            .get();
+
+        for (final doc in snapshot.docs) {
+          final employeeId = doc.id;
+          if (employeeIds.contains(employeeId)) {
+            allAttendanceData[employeeId]![shiftDate] = doc.data();
+          }
+        }
+      } catch (e) {
+        print('Error fetching attendance for date $shiftDate: $e');
+      }
+    }());
+  }
+
+  await Future.wait(futures);
+  return allAttendanceData;
+}
+
+/// Save attendance KPI snapshot for historical tracking
+Future<void> saveAttendanceKPISnapshot({
+  required String type, // 'daily', 'weekly', 'monthly'
+  required Map<String, dynamic> kpiData,
+  required DateTime calculationDate,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+  final dateKey = DateFormat('yyyy-MM-dd').format(calculationDate);
+
+  await firestore
+      .collection('attendance_kpi_snapshots')
+      .doc(type)
+      .collection('records')
+      .doc(dateKey)
+      .set({
+    'data': kpiData,
+    'calculatedAt': FieldValue.serverTimestamp(),
+    'calculationDate': calculationDate.toIso8601String(),
+  });
+}
+
+/// Get historical attendance KPI data
+Future<List<Map<String, dynamic>>> getHistoricalAttendanceKPI({
+  required String type,
+  required DateTime startDate,
+  required DateTime endDate,
+}) async {
+  final firestore = FirebaseFirestore.instance;
+
+  final snapshot = await firestore
+      .collection('attendance_kpi_snapshots')
+      .doc(type)
+      .collection('records')
+      .where('calculationDate', isGreaterThanOrEqualTo: startDate.toIso8601String())
+      .where('calculationDate', isLessThanOrEqualTo: endDate.toIso8601String())
+      .orderBy('calculationDate')
+      .get();
+
+  return snapshot.docs.map((doc) {
+    final data = doc.data();
+    data['id'] = doc.id;
+    return data;
+  }).toList();
+}
+
+/// Helper function to get 4PM-based shift date (same logic as markQRAttendance)
+DateTime get4PMShiftDate(DateTime dateTime) {
+  if (dateTime.hour < 16) {
+    // Before 4PM = previous day's shift
+    return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+  } else {
+    // 4PM or after = current day's shift
+    return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
+  }
+}
+

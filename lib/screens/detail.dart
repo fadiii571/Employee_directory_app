@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:student_projectry_app/imageview/imageview.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
 
-
 import 'package:url_launcher/url_launcher.dart';
 
 class EmployeeDetailPage extends StatelessWidget {
   final Employee employee;
 
-  const EmployeeDetailPage({Key? key, required this.employee}) : super(key: key);
+  const EmployeeDetailPage({Key? key, required this.employee})
+    : super(key: key);
 
   Widget _infoCard(String title, List<Widget> children) {
     return Card(
@@ -21,7 +21,10 @@ class EmployeeDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const Divider(thickness: 1),
             const SizedBox(height: 10),
             ...children,
@@ -85,12 +88,28 @@ class EmployeeDetailPage extends StatelessWidget {
                 _infoRow("State", employee.state, icon: Icons.location_on),
               ]),
 
+              _infoCard("District", [
+                _infoRow(
+                  "District",
+                  employee.district,
+                  icon: Icons.location_city,
+                ),
+              ]),
+
               _infoCard("Section", [
                 _infoRow("Section", employee.section, icon: Icons.badge),
               ]),
 
+              _infoCard("Joining Date", [
+                _infoRow("Date", employee.joiningDate, icon: Icons.date_range),
+              ]),
+              
               _infoCard("Salary", [
-                _infoRow("Salary", "₹${employee.salary}", icon: Icons.attach_money),
+                _infoRow(
+                  "Salary",
+                  "₹${employee.salary}",
+                  icon: Icons.attach_money,
+                ),
               ]),
 
               _infoCard("Address", [
@@ -98,7 +117,8 @@ class EmployeeDetailPage extends StatelessWidget {
                 const SizedBox(height: 10),
                 InkWell(
                   onTap: () async {
-                    final url = 'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
+                    final url =
+                        'https://www.google.com/maps/search/?api=1&query=${employee.latitude},${employee.longitude}';
                     if (await canLaunchUrl(Uri.parse(url))) {
                       await launchUrl(Uri.parse(url));
                     }
@@ -123,7 +143,9 @@ class EmployeeDetailPage extends StatelessWidget {
               const SizedBox(height: 16),
 
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 4,
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -131,7 +153,9 @@ class EmployeeDetailPage extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => Imageviewesc(imageUrl: employee.imageUrl),
+                        builder:
+                            (context) =>
+                                Imageviewesc(imageUrl: employee.imageUrl),
                       ),
                     );
                   },
@@ -150,19 +174,18 @@ class EmployeeDetailPage extends StatelessWidget {
                           child: const CircularProgressIndicator(),
                         );
                       },
-                      errorBuilder: (context, error, stackTrace) => const SizedBox(
-                        height: 200,
-                        child: Center(child: Icon(Icons.broken_image, size: 40)),
-                      ),
+                      errorBuilder:
+                          (context, error, stackTrace) => const SizedBox(
+                            height: 200,
+                            child: Center(
+                              child: Icon(Icons.broken_image, size: 40),
+                            ),
+                          ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-
-
-
-
             ],
           ),
         ),
