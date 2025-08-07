@@ -30,7 +30,49 @@ Future<void> generateAttendancePdf({
     return '${hours}h ${minutes}m';
   }
 
-  // Helper function to determine punctuality status
+  // Check if the attendance type represents a check-in
+  bool isCheckInType(dynamic type) {
+    if (type == null) return false;
+    final typeStr = type.toString().toLowerCase().trim();
+    return typeStr == 'check in' || typeStr == 'in' || typeStr == 'checkin';
+  }
+
+  // Check if the attendance type represents a check-out
+  bool isCheckOutType(dynamic type) {
+    if (type == null) return false;
+    final typeStr = type.toString().toLowerCase().trim();
+    return typeStr == 'check out' || typeStr == 'out' || typeStr == 'checkout';
+  }
+
+  // Convert different time formats to standard HH:mm format
+  String convertToStandardTimeFormat(String timeString) {
+    try {
+      // If already in HH:mm format, return as is
+      if (RegExp(r'^\d{2}:\d{2}$').hasMatch(timeString)) {
+        return timeString;
+      }
+
+      // If in hh:mm a format (e.g., "09:30 AM"), convert to HH:mm
+      if (timeString.toLowerCase().contains('am') || timeString.toLowerCase().contains('pm')) {
+        final dateTime = DateFormat('hh:mm a').parse(timeString);
+        return DateFormat('HH:mm').format(dateTime);
+      }
+
+      // If in h:mm a format (e.g., "9:30 AM"), convert to HH:mm
+      if (timeString.contains(':') && (timeString.toLowerCase().contains('am') || timeString.toLowerCase().contains('pm'))) {
+        final dateTime = DateFormat('h:mm a').parse(timeString);
+        return DateFormat('HH:mm').format(dateTime);
+      }
+
+      // Return original if can't parse
+      return timeString;
+    } catch (e) {
+      // Return original string if parsing fails
+      return timeString;
+    }
+  }
+
+  // Helper function to determine punctuality status using section shift configuration
   Future<String> getPunctualityStatus(String? checkInTime, String section) async {
     if (checkInTime == null || checkInTime.isEmpty || checkInTime == '-') {
       return 'Absent';
@@ -40,24 +82,19 @@ Future<void> generateAttendancePdf({
       // Get section shift configuration
       final sectionShift = await SectionShiftService.getSectionShift(section);
 
-      // Parse check-in time
-      final checkIn = parseTime(checkInTime);
-      final expectedCheckIn = parseTime(sectionShift.checkInTime);
+      // Convert attendance time format to standard HH:mm format
+      final standardCheckInTime = convertToStandardTimeFormat(checkInTime);
 
-      // Calculate early threshold (15 minutes before expected time)
-      final earlyThreshold = expectedCheckIn.subtract(const Duration(minutes: 15));
-
-      // Calculate late threshold (expected time + grace period)
-      final lateThreshold = expectedCheckIn.add(Duration(minutes: sectionShift.gracePeriodMinutes));
-
-      if (checkIn.isBefore(earlyThreshold)) {
-        return 'Early';
-      } else if (checkIn.isAfter(lateThreshold)) {
+      // Use SectionShiftService methods for consistent punctuality calculation
+      if (SectionShiftService.isEmployeeLate(standardCheckInTime, sectionShift)) {
         return 'Late';
+      } else if (SectionShiftService.isEmployeeEarly(standardCheckInTime, sectionShift)) {
+        return 'Early';
       } else {
         return 'On Time';
       }
     } catch (e) {
+      // Return unknown status if calculation fails
       return 'Unknown';
     }
   }
@@ -73,12 +110,12 @@ Future<void> generateAttendancePdf({
       final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
 
       final checkIns = rawLogs
-          .where((e) => e['type'] == 'In')
+          .where((e) => isCheckInType(e['type']))
           .map((e) => e['time'] ?? '-')
           .join(', ');
 
       final checkOuts = rawLogs
-          .where((e) => e['type'] == 'Out')
+          .where((e) => isCheckOutType(e['type']))
           .map((e) => e['time'] ?? '-')
           .join(', ');
 
@@ -98,7 +135,11 @@ Future<void> generateAttendancePdf({
       // Determine punctuality status
       String punctuality = 'Absent';
       if (checkIns.isNotEmpty && checkIns != '-') {
-        final firstCheckIn = rawLogs.firstWhere((e) => e['type'] == 'In', orElse: () => {});
+        // Find check-in log - handle different type formats
+        final firstCheckIn = rawLogs.firstWhere(
+          (e) => isCheckInType(e['type']),
+          orElse: () => {}
+        );
         if (firstCheckIn.isNotEmpty) {
           punctuality = await getPunctualityStatus(firstCheckIn['time'], section);
         }

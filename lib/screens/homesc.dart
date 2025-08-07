@@ -642,7 +642,7 @@ class _HomeState extends State<Home> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          
+          centerTitle: false, // This aligns the title to the left
           title: Text(
             "Employees",
             style: TextStyle(fontWeight: FontWeight.bold),

@@ -89,8 +89,9 @@ class KPIService {
         if (attendanceRecord != null) {
           final logs = List<Map<String, dynamic>>.from(attendanceRecord['logs'] ?? []);
 
+          // Find check-in log - handle different type formats
           final checkInLog = logs.firstWhere(
-            (log) => log['type'] == 'Check In',
+            (log) => _isCheckInType(log['type']),
             orElse: () => <String, dynamic>{},
           );
 
@@ -100,13 +101,16 @@ class KPIService {
             // Check punctuality based on section shift configuration
             final checkInTime = checkInLog['time'] as String;
 
-            if (SectionShiftService.isEmployeeLate(checkInTime, sectionShift)) {
+            // Parse time to handle different formats (HH:mm vs hh:mm a)
+            final parsedCheckInTime = _parseAttendanceTime(checkInTime);
+
+            if (SectionShiftService.isEmployeeLate(parsedCheckInTime, sectionShift)) {
               lateArrivals++;
             } else {
               onTimeArrivals++;
 
               // Check if employee arrived early (bonus point)
-              if (SectionShiftService.isEmployeeEarly(checkInTime, sectionShift)) {
+              if (SectionShiftService.isEmployeeEarly(parsedCheckInTime, sectionShift)) {
                 earlyArrivals++;
               }
             }
@@ -348,7 +352,44 @@ class KPIService {
   }
 
   // ==================== HELPER METHODS ====================
-  
+
+  /// Check if the attendance type represents a check-in
+  /// Handles different formats: "Check In", "In", "check in", etc.
+  static bool _isCheckInType(dynamic type) {
+    if (type == null) return false;
+    final typeStr = type.toString().toLowerCase().trim();
+    return typeStr == 'check in' || typeStr == 'in' || typeStr == 'checkin';
+  }
+
+  /// Parse attendance time to handle different formats
+  /// Converts "hh:mm a" format to "HH:mm" format for consistency
+  static String _parseAttendanceTime(String timeString) {
+    try {
+      // If already in HH:mm format, return as is
+      if (RegExp(r'^\d{2}:\d{2}$').hasMatch(timeString)) {
+        return timeString;
+      }
+
+      // If in hh:mm a format, convert to HH:mm
+      if (timeString.toLowerCase().contains('am') || timeString.toLowerCase().contains('pm')) {
+        final dateTime = DateFormat('hh:mm a').parse(timeString);
+        return DateFormat('HH:mm').format(dateTime);
+      }
+
+      // If in h:mm a format, convert to HH:mm
+      if (timeString.contains(':') && (timeString.toLowerCase().contains('am') || timeString.toLowerCase().contains('pm'))) {
+        final dateTime = DateFormat('h:mm a').parse(timeString);
+        return DateFormat('HH:mm').format(dateTime);
+      }
+
+      // Return original if can't parse
+      return timeString;
+    } catch (e) {
+      // Return original string if parsing fails
+      return timeString;
+    }
+  }
+
   /// Get employee data from cache or Firestore
   static Future<Map<String, dynamic>> _getEmployeeData(String employeeId) async {
     if (_employeeCache.containsKey(employeeId)) {
