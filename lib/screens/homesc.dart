@@ -29,6 +29,7 @@ class _HomeState extends State<Home> {
   TextEditingController numbercont = TextEditingController();
   TextEditingController statecont = TextEditingController();
   TextEditingController salarycont = TextEditingController();
+  TextEditingController authnumbercont = TextEditingController();
   TextEditingController sectioncont = TextEditingController();
   TextEditingController locationcont = TextEditingController();
   TextEditingController latitudecont = TextEditingController();
@@ -129,6 +130,12 @@ class _HomeState extends State<Home> {
     longitudecont.text = (data['longitude'] ?? '').toString();
     bool isActive = data['active'] ?? true;
     bool notify = data['notify'] ?? false;
+
+    // Profile image variables
+    String? currentProfileImageUrl = data['profileImageUrl'];
+    String? newProfileImageUrl;
+    String? currentImageUrl = data['imageUrl'];
+    String? newImageUrl;
     showDialog(
       context: context,
       builder: (dialogcontext) {
@@ -150,7 +157,144 @@ class _HomeState extends State<Home> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+
                       const SizedBox(height: 16),
+
+                      // Profile Image Section
+                      Column(
+                        children: [
+                          const Text(
+                            "Profile Image",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () async {
+                              final uploaded = await uploadToFirebaseStorage();
+                              if (uploaded != null) {
+                                setState(() {
+                                  newProfileImageUrl = uploaded;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Profile image updated")),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Upload failed")),
+                                );
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.blue,
+                                  width: 2,
+                                ),
+                              ),
+                              child: CircleAvatar(
+                                radius: 40,
+                                backgroundColor: Colors.grey[200],
+                                backgroundImage: (newProfileImageUrl ?? currentProfileImageUrl) != null
+                                    ? NetworkImage(newProfileImageUrl ?? currentProfileImageUrl!)
+                                    : null,
+                                child: (newProfileImageUrl ?? currentProfileImageUrl) == null
+                                    ? const Icon(
+                                        Icons.camera_alt,
+                                        size: 30,
+                                        color: Colors.grey,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Tap to change profile image",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Document Image Section (Optional)
+                      Column(
+                        children: [
+                          const Text(
+                            "Identity Document",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () async {
+                              final uploaded = await uploadToFirebaseStorage();
+                              if (uploaded != null) {
+                                setState(() {
+                                  newImageUrl = uploaded;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Document updated")),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Upload failed")),
+                                );
+                              }
+                            },
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Colors.blue,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: (newImageUrl ?? currentImageUrl) != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.network(
+                                        newImageUrl ?? currentImageUrl!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return const Icon(
+                                            Icons.image_not_supported,
+                                            size: 30,
+                                            color: Colors.grey,
+                                          );
+                                        },
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.add_photo_alternate,
+                                      size: 30,
+                                      color: Colors.grey,
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Tap to change document",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
                       TextField(
                         controller: namecont,
                         decoration: const InputDecoration(labelText: "Name"),
@@ -230,9 +374,11 @@ class _HomeState extends State<Home> {
                                 double.tryParse(longitudecont.text) ?? 0.0,
                             isActive: isActive,
                             notify: notify,
+                            profileImageUrl: newProfileImageUrl, // Pass new profile image if updated
+                            imageUrl: newImageUrl, // Pass new document image if updated
                             context: context,
                           );
-                         
+
                           Navigator.pop(dialogcontext);
                         },
                         child: const Text("Update"),
@@ -257,8 +403,10 @@ class _HomeState extends State<Home> {
     locationcont.clear();
     latitudecont.clear();
     longitudecont.clear();
+    authnumbercont.clear();
     String? profileimageUrl;
     String? imageUrl;
+    String? dialogSelectedSection; // Separate variable for dialog
 
     showDialog(
       context: context,
@@ -307,53 +455,59 @@ class _HomeState extends State<Home> {
   ),
 ),
 
-                    SizedBox(height: 10),
+                    SizedBox(height: 7),
                     buildTextField("Name", namecont),
-                    SizedBox(height: 10),
+                    SizedBox(height: 7),
                     buildTextField("Phone Number", numbercont),
-                    SizedBox(height: 10),
+                    SizedBox(height: 7),
                     buildTextField("State", statecont),
-                    SizedBox(height: 10),
+                    SizedBox(height: 7),
                     buildTextField("District", districtcont),
-                    SizedBox(height: 10),
+                    SizedBox(height: 7),
                     buildTextField("Salary", salarycont),
-                    SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: selectedSection,
-                      decoration: InputDecoration(
-                        hintText: "Select Section",
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      items:
-                          [
-                                'Admin office',
-                                'Anchor',
-                                'Fancy',
-                                'KK',
-                                'Soldering',
-                                'Wire',
-                                'Joint',
-                                'V chain',
-                                'Cutting',
-                                'Box chain',
-                                'Polish',
-                              ]
-                              .map(
-                                (section) => DropdownMenuItem(
-                                  value: section,
-                                  child: Text(section),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          selectedSection = val;
-                          sectioncont.text = val ?? '';
-                        });
+                    SizedBox(height: 7),
+                    buildTextField("Auth Number", authnumbercont),
+                    SizedBox(height: 7),
+                    StatefulBuilder(
+                      builder: (context, setDialogState) {
+                        return DropdownButtonFormField<String>(
+                          value: dialogSelectedSection,
+                          decoration: InputDecoration(
+                            hintText: "Select Section",
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          items:
+                              [
+                                    'Admin office',
+                                    'Anchor',
+                                    'Fancy',
+                                    'KK',
+                                    'Soldering',
+                                    'Wire',
+                                    'Joint',
+                                    'V chain',
+                                    'Cutting',
+                                    'Box chain',
+                                    'Polish',
+                                  ]
+                                  .map(
+                                    (section) => DropdownMenuItem(
+                                      value: section,
+                                      child: Text(section),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (val) {
+                            setDialogState(() {
+                              dialogSelectedSection = val;
+                              sectioncont.text = val ?? '';
+                            });
+                          },
+                        );
                       },
                     ),
                     SizedBox(height: 10),
@@ -448,6 +602,7 @@ class _HomeState extends State<Home> {
                           location: locationcont.text,
                           latitude: double.tryParse(latitudecont.text) ?? 0.0,
                           longitude: double.tryParse(longitudecont.text) ?? 0.0,
+                          authnumber: double.tryParse(authnumbercont.text) ?? 0.0,
                         );
 
                         namecont.clear();
@@ -458,7 +613,7 @@ class _HomeState extends State<Home> {
                         locationcont.clear();
                         latitudecont.clear();
                         longitudecont.clear();
-                        selectedSection = null;
+                        dialogSelectedSection = null;
                         joincont.clear();
                         Navigator.pop(context);
                       },

@@ -14,10 +14,16 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
   bool isLoading = true;
   String? errorMessage;
 
+  // Include Fancy and KK as configurable (they keep extended checkout but configurable check-in)
   final List<String> sections = [
-    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering', 
-    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+    'Fancy', 'KK', 'Anchor', 'Soldering', 'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
   ];
+
+  // Only Admin office has fully hardcoded logic (not configurable)
+  final List<String> hardcodedSections = ['Admin office'];
+
+  // Sections with extended checkout until 6PM (but configurable check-in)
+  final List<String> extendedCheckoutSections = ['Fancy', 'KK'];
 
   @override
   void initState() {
@@ -32,7 +38,9 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
     });
 
     try {
-      final shifts = await SectionShiftService.loadSectionShiftsFromFirestore();
+      // Initialize the service and get all shifts
+      await SectionShiftService.initialize();
+      final shifts = await SectionShiftService.getAllSectionShifts();
       setState(() {
         sectionShifts = shifts;
         isLoading = false;
@@ -48,9 +56,8 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
   Future<void> _editSectionShift(String sectionName) async {
     final currentShift = sectionShifts[sectionName] ?? SectionShift(
       sectionName: sectionName,
-      startTime: '09:00',
-      endTime: '17:00',
-      isOvernightShift: false,
+      checkInTime: '09:00',
+      gracePeriodMinutes: 0,
     );
 
     final result = await showDialog<SectionShift>(
@@ -64,28 +71,31 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
       try {
         await SectionShiftService.updateSectionShift(
           sectionName: result.sectionName,
-          startTime: result.startTime,
-          endTime: result.endTime,
-          isOvernightShift: result.isOvernightShift,
+          checkInTime: result.checkInTime,
+          gracePeriodMinutes: result.gracePeriodMinutes,
         );
 
         setState(() {
           sectionShifts[sectionName] = result;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${result.sectionName} shift updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${result.sectionName} shift updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating shift: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error updating shift: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -101,6 +111,19 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadSectionShifts,
+          ),
+          IconButton(
+            onPressed: () async {
+              // Debug Joint section configuration
+              await SectionShiftService.debugJointSectionConfig();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Check console for Joint section debug info')),
+                );
+              }
+            },
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Debug Joint Section',
           ),
         ],
       ),
@@ -139,9 +162,145 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
                     ],
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: sections.length,
+              : Column(
+                  children: [
+                    // Hardcoded sections info
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info, color: Colors.blue, size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Hardcoded Shift Sections',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'This section has fully hardcoded logic in markQRAttendance:',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 8),
+                          ...hardcodedSections.map((section) {
+                            String shiftInfo;
+                            if (section.toLowerCase() == 'fancy' || section.toLowerCase() == 'kk') {
+                              shiftInfo = '$section - 5:30 AM check-in (10min grace), 4PM-4PM shift storage (extended checkout until 6PM)';
+                            } else {
+                              shiftInfo = '$section - 4PM shift start (extended checkout until 6PM next day)';
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 16, bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      shiftInfo,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'KPI calculations: Admin Office uses 4PM check-in time.',
+                            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Extended checkout sections info
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.access_time, color: Colors.orange[700], size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Extended Checkout Sections',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'These sections have configurable check-in time but extended checkout until 6PM:',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 8),
+                          ...extendedCheckoutSections.map((section) => Padding(
+                            padding: const EdgeInsets.only(left: 16, bottom: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '$section - Configurable check-in time, extended checkout until 6PM',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Note: Check-in time is configurable, but checkout logic remains hardcoded in markQRAttendance.',
+                            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Configurable sections header
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'All Configurable Sections',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Configurable sections list
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: sections.length,
                   itemBuilder: (context, index) {
                     final sectionName = sections[index];
                     final shift = sectionShifts[sectionName];
@@ -170,7 +329,7 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
                                     style: const TextStyle(fontSize: 14),
                                   ),
                                   Text(
-                                    'Duration: ${SectionShiftService.getShiftDurationHours(shift).toStringAsFixed(1)} hours',
+                                    'Grace Period: ${shift.gracePeriodMinutes} minutes',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
@@ -190,6 +349,9 @@ class _SectionShiftConfigScreenState extends State<SectionShiftConfigScreen> {
                       ),
                     );
                   },
+                      ),
+                    ),
+                  ],
                 ),
     );
   }
@@ -208,22 +370,19 @@ class _SectionShiftEditDialog extends StatefulWidget {
 }
 
 class _SectionShiftEditDialogState extends State<_SectionShiftEditDialog> {
-  late TextEditingController startTimeController;
-  late TextEditingController endTimeController;
-  late bool isOvernightShift;
+  late TextEditingController checkInTimeController;
+  late int gracePeriodMinutes;
 
   @override
   void initState() {
     super.initState();
-    startTimeController = TextEditingController(text: widget.sectionShift.startTime);
-    endTimeController = TextEditingController(text: widget.sectionShift.endTime);
-    isOvernightShift = widget.sectionShift.isOvernightShift;
+    checkInTimeController = TextEditingController(text: widget.sectionShift.checkInTime);
+    gracePeriodMinutes = widget.sectionShift.gracePeriodMinutes;
   }
 
   @override
   void dispose() {
-    startTimeController.dispose();
-    endTimeController.dispose();
+    checkInTimeController.dispose();
     super.dispose();
   }
 
@@ -257,39 +416,53 @@ class _SectionShiftEditDialogState extends State<_SectionShiftEditDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const Text(
+              'Configure Check-In Time for KPI Calculations',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Only check-in time is used for punctuality calculations. Check-out time is flexible.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
             TextField(
-              controller: startTimeController,
+              controller: checkInTimeController,
               decoration: const InputDecoration(
-                labelText: 'Start Time',
+                labelText: 'Check-In Time',
                 hintText: 'HH:MM (24-hour format)',
                 border: OutlineInputBorder(),
                 suffixIcon: Icon(Icons.access_time),
+                helperText: 'Expected arrival time for employees',
               ),
               readOnly: true,
-              onTap: () => _selectTime(startTimeController),
+              onTap: () => _selectTime(checkInTimeController),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: endTimeController,
-              decoration: const InputDecoration(
-                labelText: 'End Time',
-                hintText: 'HH:MM (24-hour format)',
-                border: OutlineInputBorder(),
-                suffixIcon: Icon(Icons.access_time),
-              ),
-              readOnly: true,
-              onTap: () => _selectTime(endTimeController),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Text('Grace Period: '),
+                const SizedBox(width: 10),
+                DropdownButton<int>(
+                  value: gracePeriodMinutes,
+                  items: [0, 5, 10, 15, 30].map((minutes) {
+                    return DropdownMenuItem(
+                      value: minutes,
+                      child: Text('$minutes minutes'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      gracePeriodMinutes = value ?? 0;
+                    });
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            SwitchListTile(
-              title: const Text('Overnight Shift'),
-              subtitle: const Text('Check if shift crosses midnight'),
-              value: isOvernightShift,
-              onChanged: (value) {
-                setState(() {
-                  isOvernightShift = value;
-                });
-              },
+            const SizedBox(height: 8),
+            const Text(
+              'Grace period allows employees to arrive slightly late without being marked as late.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
@@ -303,9 +476,8 @@ class _SectionShiftEditDialogState extends State<_SectionShiftEditDialog> {
           onPressed: () {
             final updatedShift = SectionShift(
               sectionName: widget.sectionShift.sectionName,
-              startTime: startTimeController.text,
-              endTime: endTimeController.text,
-              isOvernightShift: isOvernightShift,
+              checkInTime: checkInTimeController.text,
+              gracePeriodMinutes: gracePeriodMinutes,
             );
             Navigator.of(context).pop(updatedShift);
           },

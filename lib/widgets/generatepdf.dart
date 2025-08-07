@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:student_projectry_app/Services/section_shift_service.dart';
 
 Future<void> generateAttendancePdf({
   required String title,
@@ -27,6 +28,38 @@ Future<void> generateAttendancePdf({
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     return '${hours}h ${minutes}m';
+  }
+
+  // Helper function to determine punctuality status
+  Future<String> getPunctualityStatus(String? checkInTime, String section) async {
+    if (checkInTime == null || checkInTime.isEmpty || checkInTime == '-') {
+      return 'Absent';
+    }
+
+    try {
+      // Get section shift configuration
+      final sectionShift = await SectionShiftService.getSectionShift(section);
+
+      // Parse check-in time
+      final checkIn = parseTime(checkInTime);
+      final expectedCheckIn = parseTime(sectionShift.checkInTime);
+
+      // Calculate early threshold (15 minutes before expected time)
+      final earlyThreshold = expectedCheckIn.subtract(const Duration(minutes: 15));
+
+      // Calculate late threshold (expected time + grace period)
+      final lateThreshold = expectedCheckIn.add(Duration(minutes: sectionShift.gracePeriodMinutes));
+
+      if (checkIn.isBefore(earlyThreshold)) {
+        return 'Early';
+      } else if (checkIn.isAfter(lateThreshold)) {
+        return 'Late';
+      } else {
+        return 'On Time';
+      }
+    } catch (e) {
+      return 'Unknown';
+    }
   }
 
   // Build the PDF content
@@ -62,6 +95,15 @@ Future<void> generateAttendancePdf({
       final status = checkIns.isNotEmpty && checkOuts.isNotEmpty ? 'Complete' :
                     checkIns.isNotEmpty ? 'In Progress' : 'Absent';
 
+      // Determine punctuality status
+      String punctuality = 'Absent';
+      if (checkIns.isNotEmpty && checkIns != '-') {
+        final firstCheckIn = rawLogs.firstWhere((e) => e['type'] == 'In', orElse: () => {});
+        if (firstCheckIn.isNotEmpty) {
+          punctuality = await getPunctualityStatus(firstCheckIn['time'], section);
+        }
+      }
+
       tableData.add([
         name,
         section,
@@ -69,6 +111,7 @@ Future<void> generateAttendancePdf({
         checkOuts.isEmpty ? '-' : checkOuts,
         formatDuration(workedDuration),
         status,
+        punctuality, // New punctuality column
       ]);
     }
 
@@ -130,8 +173,8 @@ Future<void> generateAttendancePdf({
             style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 15),
-          pw.Table.fromTextArray(
-            headers: ['Employee Name', 'Section', 'Check In', 'Check Out', 'Total Hours', 'Status'],
+          pw.TableHelper.fromTextArray(
+            headers: ['Employee Name', 'Section', 'Check In', 'Check Out', 'Total Hours', 'Status', 'Punctuality'],
             data: tableData,
             headerStyle: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
@@ -141,12 +184,13 @@ Future<void> generateAttendancePdf({
             cellStyle: const pw.TextStyle(fontSize: 10),
             cellAlignment: pw.Alignment.centerLeft,
             columnWidths: {
-              0: const pw.FlexColumnWidth(2.5),
-              1: const pw.FlexColumnWidth(1.5),
-              2: const pw.FlexColumnWidth(1.5),
-              3: const pw.FlexColumnWidth(1.5),
-              4: const pw.FlexColumnWidth(1.5),
-              5: const pw.FlexColumnWidth(1.5),
+              0: const pw.FlexColumnWidth(2.0), // Employee Name
+              1: const pw.FlexColumnWidth(1.2), // Section
+              2: const pw.FlexColumnWidth(1.2), // Check In
+              3: const pw.FlexColumnWidth(1.2), // Check Out
+              4: const pw.FlexColumnWidth(1.2), // Total Hours
+              5: const pw.FlexColumnWidth(1.2), // Status
+              6: const pw.FlexColumnWidth(1.0), // Punctuality
             },
             cellDecoration: (index, data, rowNum) {
               return pw.BoxDecoration(
@@ -258,7 +302,7 @@ Future<void> generateAttendancePdf({
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 15),
-            pw.Table.fromTextArray(
+            pw.TableHelper.fromTextArray(
               headers: ['Employee Name', 'Total Hours'],
               data: tableData,
               headerStyle: pw.TextStyle(

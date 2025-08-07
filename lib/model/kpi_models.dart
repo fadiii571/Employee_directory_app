@@ -1,34 +1,35 @@
-// Section Shift Configuration
+// Section Shift Configuration - Focused on Check-In Time Only
 class SectionShift {
   final String sectionName;
-  final String startTime; // Format: "HH:mm"
-  final String endTime;   // Format: "HH:mm"
-  final bool isOvernightShift; // If shift crosses midnight
+  final String checkInTime; // Format: "HH:mm" - Only check-in time matters for KPI
+  final int gracePeriodMinutes; // Grace period for late arrivals (optional)
 
   SectionShift({
     required this.sectionName,
-    required this.startTime,
-    required this.endTime,
-    this.isOvernightShift = false,
+    required this.checkInTime,
+    this.gracePeriodMinutes = 0, // Default: no grace period
   });
 
   factory SectionShift.fromJson(Map<String, dynamic> json) {
     return SectionShift(
       sectionName: json['sectionName'] ?? '',
-      startTime: json['startTime'] ?? '09:00',
-      endTime: json['endTime'] ?? '17:00',
-      isOvernightShift: json['isOvernightShift'] ?? false,
+      checkInTime: json['checkInTime'] ?? json['startTime'] ?? '09:00', // Backward compatibility
+      gracePeriodMinutes: json['gracePeriodMinutes'] ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'sectionName': sectionName,
-      'startTime': startTime,
-      'endTime': endTime,
-      'isOvernightShift': isOvernightShift,
+      'checkInTime': checkInTime,
+      'gracePeriodMinutes': gracePeriodMinutes,
     };
   }
+
+  // Backward compatibility getters
+  String get startTime => checkInTime;
+  String get endTime => '17:00'; // Dummy value for compatibility
+  bool get isOvernightShift => false; // Not used anymore
 }
 
 // Simplified Attendance KPI focused on attendance only

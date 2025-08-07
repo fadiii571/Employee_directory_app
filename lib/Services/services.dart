@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -7,12 +6,53 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../model/kpi_models.dart';
 import 'section_shift_service.dart';
+import 'employee_service.dart';
+import 'attendance_service.dart';
+import 'payroll_service.dart';
+import 'kpi_service.dart';
 
+/// Core Business Services for Student Project Management App
+///
+/// This file contains all the main business logic services:
+/// - Employee Management (CRUD operations)
+/// - Attendance Management (QR-based check-in/out)
+/// - Payroll Calculations (30-day fixed cycles)
+/// - KPI Calculations (section-aware punctuality)
+/// - File Upload Services (images, documents)
+/// - PDF Generation Services
+///
+/// All services use Firebase Firestore as the backend database
+/// and include caching mechanisms for performance optimization.
+
+// ==================== GLOBAL CONSTANTS ====================
+
+/// Standard sections available in the system
+const List<String> AVAILABLE_SECTIONS = [
+  'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
+  'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+];
+
+/// Fixed working days per month for payroll calculations
+const int FIXED_WORKING_DAYS_PER_MONTH = 30;
+
+// ==================== CACHE MANAGEMENT ====================
+
+/// Global caches for performance optimization
+Map<String, Map<String, dynamic>> _employeeCache = {};
+Map<String, Map<String, dynamic>> _kpiCache = {};
+Map<String, List<Map<String, dynamic>>> _attendanceHistoryCache = {};
+
+// ==================== EMPLOYEE MANAGEMENT SERVICES ====================
+
+/// DEPRECATED: Use EmployeeService.addEmployee() instead
+///
+/// This function is kept for backward compatibility but will be removed in future versions.
+/// Please migrate to the new EmployeeService for better error handling and performance.
+@Deprecated('Use EmployeeService.addEmployee() instead')
 Future<void> Addemployee({
   required String name,
   required String number,
@@ -26,42 +66,29 @@ Future<void> Addemployee({
   required String location,
   required double latitude,
   required double longitude,
+  required double authnumber,
   required BuildContext context,
 }) async {
-  try { 
+  // Delegate to new service
+  final success = await EmployeeService.addEmployee(
+    name: name,
+    number: number,
+    state: state,
+    district: district,
+    salary: salary,
+    section: section,
+    joiningDate: joiningDate,
+    profileImageUrl: profileimageUrl,
+    imageUrl: imageUrl,
+    location: location,
+    latitude: latitude,
+    longitude: longitude,
+    authNumber: authnumber,
+    context: context,
+  );
 
-
-    await FirebaseFirestore.instance.collection("Employees").add({
-      "name": name,
-      "number": number,
-      "state": state,
-      "district": district,
-      "salary": salary,
-      "section": section,
-      "joiningDate": joiningDate,
-      "imageUrl": imageUrl,
-      "profileImageUrl": profileimageUrl,
-      "location": location,
-      "latitude": latitude, 
-      "longitude": longitude,
-    });
+  if (success && context.mounted) {
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "Employee added successfully",
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue,
-          ),
-        ),
-      ),
-    );
-  } catch (e) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(e.toString())));
   }
 }
 Future<String?> uploadToFirebaseStorage() async {
@@ -127,22 +154,37 @@ Future<void> updateemployee({
   required double longitude,
   required bool isActive,
   required bool notify,
+  String? profileImageUrl, // Optional profile image update
+  String? imageUrl, // Optional document image update
   required BuildContext context,
 }) async {
   try {
-    await FirebaseFirestore.instance.collection("Employees").doc(id).update({
+    Map<String, dynamic> updateData = {
       "name": name,
       "number": number,
       "state": state,
       "salary": salary,
       "section": section,
       "location": location,
-      "latitude": latitude, 
+      "latitude": latitude,
       "longitude": longitude,
       'status': isActive,
-      'notify':notify,
-    });
-    Navigator.pop(context);
+      'notify': notify,
+    };
+
+    // Only update profile image if a new one is provided
+    if (profileImageUrl != null) {
+      updateData['profileImageUrl'] = profileImageUrl;
+    }
+
+    // Only update document image if a new one is provided
+    if (imageUrl != null) {
+      updateData['imageUrl'] = imageUrl;
+    }
+
+    await FirebaseFirestore.instance.collection("Employees").doc(id).update(updateData);
+
+    // Don't pop here - let the calling code handle navigation
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -427,7 +469,9 @@ Future<void> generatePayrollForMonth(String monthYear) async {
   final employeeSnapshot = await _firestore.collection('Employees').get();
   final year = int.parse(monthYear.split('-')[0]);
   final month = int.parse(monthYear.split('-')[1]);
-  final totalDaysInMonth = DateUtils.getDaysInMonth(year, month);
+
+  // ✅ FIXED: Use 30 working days for every month
+  const int fixedWorkingDays = 30;
 
   for (final employeeDoc in employeeSnapshot.docs) {
     final emp = employeeDoc.data();
@@ -435,52 +479,13 @@ Future<void> generatePayrollForMonth(String monthYear) async {
 
     final salary = double.tryParse(emp['salary'].toString()) ?? 0.0;
 
-    int presentDays = 0;
-    int paidLeaves = 0;
-    int workingDays = 0;
+    // Get attendance and paid leave counts for the month
+    int presentDays = await _getMonthlyAttendanceCount(_firestore, empId, year, month);
+    int paidLeaves = await _getMonthlyPaidLeaveCount(_firestore, empId, year, month);
 
-    for (int day = 1; day <= totalDaysInMonth; day++) {
-      final date = DateTime(year, month, day);
-      final shiftStart = DateTime(date.year, date.month, date.day, 16);
-
-      // ✅ Skip Sunday 4PM–Monday 4PM shifts (company holiday)
-      if (shiftStart.weekday == DateTime.sunday) continue;
-
-      workingDays++;
-
-      final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
-
-      final attendanceDoc = await _firestore
-          .collection('attendance')
-          .doc(formatted)
-          .collection('records')
-          .doc(empId)
-          .get();
-
-      final paidLeaveDoc = await _firestore
-          .collection('paid_leaves')
-          .doc(formatted)
-          .collection('Employees')
-          .doc(empId)
-          .get();
-
-      if (attendanceDoc.exists) {
-        final logs = List.from(attendanceDoc.data()?['logs'] ?? []);
-        final inLog = logs.any((log) => log['type'] == 'In');
-        final outLog = logs.any((log) => log['type'] == 'Out');
-
-        if (inLog && outLog) {
-          presentDays++;
-        } else if (paidLeaveDoc.exists) {
-          paidLeaves++;
-        }
-      } else if (paidLeaveDoc.exists) {
-        paidLeaves++;
-      }
-    }
-
-    final absentDays = workingDays - presentDays - paidLeaves;
-    final dailyRate = workingDays > 0 ? salary / workingDays : 0;
+    // Calculate based on fixed 30-day working month
+    final absentDays = fixedWorkingDays - presentDays - paidLeaves;
+    final dailyRate = salary / fixedWorkingDays; // Always divide by 30
     final deduction = dailyRate * absentDays;
     final finalSalary = salary - deduction;
 
@@ -496,7 +501,7 @@ Future<void> generatePayrollForMonth(String monthYear) async {
       'presentDays': presentDays,
       'paidLeaves': paidLeaves,
       'absentDays': absentDays,
-      'workingDays': workingDays,
+      'workingDays': fixedWorkingDays, // Always 30
       'deduction': deduction,
       'finalSalary': finalSalary,
       'status': 'Unpaid',
@@ -508,6 +513,75 @@ Future<void> generatePayrollForMonth(String monthYear) async {
   }
 }
 
+/// Helper function to count attendance days for a specific month
+Future<int> _getMonthlyAttendanceCount(FirebaseFirestore firestore, String employeeId, int year, int month) async {
+  int attendanceCount = 0;
+  final totalDaysInMonth = DateUtils.getDaysInMonth(year, month);
+
+  for (int day = 1; day <= totalDaysInMonth; day++) {
+    final date = DateTime(year, month, day);
+    final shiftStart = DateTime(date.year, date.month, date.day, 16);
+    final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
+
+    final attendanceDoc = await firestore
+        .collection('attendance')
+        .doc(formatted)
+        .collection('records')
+        .doc(employeeId)
+        .get();
+
+    if (attendanceDoc.exists) {
+      final logs = List.from(attendanceDoc.data()?['logs'] ?? []);
+      final hasCheckIn = logs.any((log) => log['type'] == 'In');
+
+      if (hasCheckIn) {
+        attendanceCount++;
+      }
+    }
+  }
+
+  return attendanceCount;
+}
+
+/// Helper function to count paid leave days for a specific month
+Future<int> _getMonthlyPaidLeaveCount(FirebaseFirestore firestore, String employeeId, int year, int month) async {
+  int paidLeaveCount = 0;
+  final totalDaysInMonth = DateUtils.getDaysInMonth(year, month);
+
+  for (int day = 1; day <= totalDaysInMonth; day++) {
+    final date = DateTime(year, month, day);
+    final shiftStart = DateTime(date.year, date.month, date.day, 16);
+    final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
+
+    final paidLeaveDoc = await firestore
+        .collection('paid_leaves')
+        .doc(formatted)
+        .collection('Employees')
+        .doc(employeeId)
+        .get();
+
+    if (paidLeaveDoc.exists) {
+      paidLeaveCount++;
+    }
+  }
+
+  return paidLeaveCount;
+}
+
+/// Update payroll payment status (Paid/Unpaid)
+Future<void> updatePayrollStatus(String monthYear, String employeeId, String status) async {
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  await firestore
+      .collection('payroll')
+      .doc(monthYear)
+      .collection('Employees')
+      .doc(employeeId)
+      .update({
+    'status': status,
+    'statusUpdatedAt': FieldValue.serverTimestamp(),
+  });
+}
 
 Future<void> markPaidLeave(String employeeId, DateTime date, String reason) async {
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -569,8 +643,7 @@ Future<List<Map<String, dynamic>>> fetchPaidLeaveHistory({
 
 // ==================== ATTENDANCE KPI CALCULATION FUNCTIONS ====================
 
-// Cache for employee data to avoid repeated Firestore calls
-final Map<String, Map<String, dynamic>> _employeeCache = {};
+// Using global cache defined at top of file
 
 /// OPTIMIZATION: Batch fetch attendance data for multiple dates
 Future<Map<String, Map<String, dynamic>>> _batchFetchAttendanceData(
@@ -666,7 +739,7 @@ Future<AttendanceKPI> calculateEmployeeAttendanceKPI({
   final section = empData['section'] ?? 'Unknown';
 
   // Get section shift configuration
-  final sectionShift = SectionShiftService.getSectionShift(section);
+  final sectionShift = await SectionShiftService.getSectionShift(section);
 
   // Calculate shift dates using consistent 4PM-4PM logic for all sections
   List<String> shiftDates = [];
@@ -765,7 +838,7 @@ Future<SectionAttendanceSummary> calculateSectionAttendanceSummary({
   final firestore = FirebaseFirestore.instance;
 
   // Get section shift configuration
-  final sectionShift = SectionShiftService.getSectionShift(sectionName);
+  final sectionShift = await SectionShiftService.getSectionShift(sectionName);
 
   // Get all employees in the section
   final employeeSnapshot = await firestore
@@ -816,11 +889,7 @@ Future<SectionAttendanceSummary> calculateSectionAttendanceSummary({
   );
 }
 
-// Cache for KPI data to avoid recalculation
-final Map<String, Map<String, dynamic>> _kpiCache = {};
-
-// Cache for attendance history to avoid repeated queries
-final Map<String, Map<String, List<Map<String, dynamic>>>> _attendanceHistoryCache = {};
+// Using global caches defined at top of file
 
 /// OPTIMIZED: Get attendance KPI data with caching and parallel processing
 Future<Map<String, dynamic>> getAttendanceKPIData(KPIFilter filter) async {

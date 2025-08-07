@@ -175,30 +175,7 @@ class EmployeeDetailPage extends StatelessWidget {
                       ),
                     );
                   },
-                  child: Hero(
-                    tag: employee.imageUrl,
-                    child: Image.network(
-                      employee.imageUrl,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          height: 200,
-                          alignment: Alignment.center,
-                          child: const CircularProgressIndicator(),
-                        );
-                      },
-                      errorBuilder:
-                          (context, error, stackTrace) => const SizedBox(
-                            height: 200,
-                            child: Center(
-                              child: Icon(Icons.broken_image, size: 40),
-                            ),
-                          ),
-                    ),
-                  ),
+                 
                 ),
               ),
               const SizedBox(height: 20),
