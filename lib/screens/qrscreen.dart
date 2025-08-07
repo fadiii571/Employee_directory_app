@@ -1,13 +1,5 @@
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:flutter/rendering.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:flutter/services.dart';
+import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class EmployeeQrViewScreen extends StatelessWidget {
   final String employeeId;
@@ -21,41 +13,25 @@ class EmployeeQrViewScreen extends StatelessWidget {
 
   Future<void> _generateAndSharePdf(BuildContext context) async {
     try {
-      final qrPainter = QrPainter(
-        data: employeeId,
-        version: QrVersions.auto,
-        gapless: false,
+      // Use the new enhanced QR code generator
+      await saveQrCodeAsPdf(
+        employeeId: employeeId,
+        employeeName: employeeName,
+        section: null, // You can add section info if available
+        share: true,
       );
 
-      final image = await qrPainter.toImage(300);
-      final byteData = await image.toByteData(format: ImageByteFormat.png);
-      final qrBytes = byteData!.buffer.asUint8List();
-
-      final pdf = pw.Document();
-      final pwImage = pw.MemoryImage(qrBytes);
-
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) => pw.Column(
-            mainAxisAlignment: pw.MainAxisAlignment.center,
-            children: [
-              pw.Text('Employee: $employeeName', style: pw.TextStyle(fontSize: 24)),
-              pw.SizedBox(height: 16),
-              pw.Image(pwImage, width: 200, height: 200),
-              pw.SizedBox(height: 16),
-              pw.Text('ID: $employeeId'),
-            ],
-          ),
-        ),
-      );
-
-      final output = await getTemporaryDirectory();
-      final file = File('${output.path}/$employeeName-QR.pdf');
-      await file.writeAsBytes(await pdf.save());
-
-      await Share.shareXFiles([XFile(file.path)], text: 'QR Code for $employeeName');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("QR Code PDF generated and shared!")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     }
   }
 
@@ -64,24 +40,29 @@ class EmployeeQrViewScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text("QR for $employeeName")),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            QrImageView(
-              data: employeeId,
-              version: QrVersions.auto,
-              size: 250,
-            ),
-            const SizedBox(height: 16),
-            Text("Employee: $employeeName", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text("ID: $employeeId", style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: Icon(Icons.share),
-              label: Text("Share QR as PDF"),
-              onPressed: () => _generateAndSharePdf(context),
-            ),
-          ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Use the new clean QR widget
+              CleanQRCodeWidget(
+                employeeId: employeeId,
+                employeeName: employeeName,
+                size: 250,
+                showEmployeeInfo: true,
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.share),
+                label: const Text("Share QR as PDF"),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                onPressed: () => _generateAndSharePdf(context),
+              ),
+            ],
+          ),
         ),
       ),
     );

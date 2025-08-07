@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -13,18 +12,14 @@ Future<void> generateAttendancePdf({
   final pdf = pw.Document();
   final dateFormat = DateFormat('hh:mm a');
 
-  DateTime _parseTime(String timeStr, DateTime fallbackDate) {
+  // Helper functions
+  DateTime parseTime(String timeStr) {
     try {
       final parsedTime = dateFormat.parse(timeStr);
-      return DateTime(
-        fallbackDate.year,
-        fallbackDate.month,
-        fallbackDate.day,
-        parsedTime.hour,
-        parsedTime.minute,
-      );
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day, parsedTime.hour, parsedTime.minute);
     } catch (_) {
-      return fallbackDate;
+      return DateTime.now();
     }
   }
 
@@ -34,86 +29,273 @@ Future<void> generateAttendancePdf({
     return '${hours}h ${minutes}m';
   }
 
-  pdf.addPage(
-    pw.MultiPage(
-      build: (context) {
-        List<pw.Widget> content = [
-          pw.Text(title, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 12),
-        ];
+  // Build the PDF content
+  if (viewType == 'Daily') {
+    // Daily Report with Table
+    final tableData = <List<String>>[];
 
-        if (viewType == 'Daily') {
-          for (final entry in logs) {
-            final name = entry['name'] ?? '-';
-            final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
-            final fallbackDate = DateTime.now(); // Adjust if needed
+    for (final entry in logs) {
+      final name = entry['name'] ?? '-';
+      final section = entry['section'] ?? 'Unknown';
+      final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
 
-            final checkIns = rawLogs
-                .where((e) => e['type'] == 'In')
-                .map((e) => e['time'] ?? '-')
-                .join(', ');
+      final checkIns = rawLogs
+          .where((e) => e['type'] == 'In')
+          .map((e) => e['time'] ?? '-')
+          .join(', ');
 
-            final checkOuts = rawLogs
-                .where((e) => e['type'] == 'Out')
-                .map((e) => e['time'] ?? '-')
-                .join(', ');
+      final checkOuts = rawLogs
+          .where((e) => e['type'] == 'Out')
+          .map((e) => e['time'] ?? '-')
+          .join(', ');
 
-            Duration workedDuration = Duration.zero;
+      Duration workedDuration = Duration.zero;
+      final inLog = rawLogs.firstWhere((e) => e['type'] == 'In', orElse: () => {});
+      final outLog = rawLogs.firstWhere((e) => e['type'] == 'Out', orElse: () => {});
 
-            final inLog = rawLogs.firstWhere((e) => e['type'] == 'In', orElse: () => {});
-            final outLog = rawLogs.firstWhere((e) => e['type'] == 'Out', orElse: () => {});
+      if (inLog.isNotEmpty && outLog.isNotEmpty) {
+        final inTime = parseTime(inLog['time']);
+        final outTime = parseTime(outLog['time']);
+        workedDuration = outTime.difference(inTime);
+      }
 
-            if (inLog.isNotEmpty && outLog.isNotEmpty) {
-              final inTime = _parseTime(inLog['time'], fallbackDate);
-              final outTime = _parseTime(outLog['time'], fallbackDate);
-              workedDuration = outTime.difference(inTime);
-            }
+      final status = checkIns.isNotEmpty && checkOuts.isNotEmpty ? 'Complete' :
+                    checkIns.isNotEmpty ? 'In Progress' : 'Absent';
 
-            content.add(
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 6),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('Name: $name', style: const pw.TextStyle(fontSize: 14)),
-                    pw.Text('Check In: $checkIns', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text('Check Out: $checkOuts', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text('Total Hours: ${formatDuration(workedDuration)}',
-                        style: const pw.TextStyle(fontSize: 12)),
-                    pw.Divider(),
-                  ],
+      tableData.add([
+        name,
+        section,
+        checkIns.isEmpty ? '-' : checkIns,
+        checkOuts.isEmpty ? '-' : checkOuts,
+        formatDuration(workedDuration),
+        status,
+      ]);
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
+        header: (context) => pw.Container(
+          padding: const pw.EdgeInsets.only(bottom: 20),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 1)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'ATTENDANCE REPORT',
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-            );
-          }
-        } else {
-          // Weekly / Monthly: Show only name and total worked hours
-          summary?.forEach((name, totalDuration) {
-            content.add(
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 6),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              pw.SizedBox(height: 8),
+              pw.Text(
+                title,
+                style: const pw.TextStyle(fontSize: 16),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Generated on ${DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        footer: (context) => pw.Container(
+          padding: const pw.EdgeInsets.only(top: 10),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'Student Project App - Attendance System',
+                style: const pw.TextStyle(fontSize: 10),
+              ),
+              pw.Text(
+                'Page ${context.pageNumber}',
+                style: const pw.TextStyle(fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+        build: (context) => [
+          pw.SizedBox(height: 20),
+          pw.Text(
+            'Daily Attendance Summary',
+            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 15),
+          pw.Table.fromTextArray(
+            headers: ['Employee Name', 'Section', 'Check In', 'Check Out', 'Total Hours', 'Status'],
+            data: tableData,
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 12,
+            ),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            cellStyle: const pw.TextStyle(fontSize: 10),
+            cellAlignment: pw.Alignment.centerLeft,
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2.5),
+              1: const pw.FlexColumnWidth(1.5),
+              2: const pw.FlexColumnWidth(1.5),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+              5: const pw.FlexColumnWidth(1.5),
+            },
+            cellDecoration: (index, data, rowNum) {
+              return pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 0.5),
+              );
+            },
+          ),
+          pw.SizedBox(height: 30),
+          // Summary Statistics
+          pw.Container(
+            padding: const pw.EdgeInsets.all(20),
+            decoration: pw.BoxDecoration(
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.black, width: 1),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Column(
                   children: [
-                    pw.Text(name, style: const pw.TextStyle(fontSize: 14)),
-                    pw.Text('Total: $totalDuration', style: const pw.TextStyle(fontSize: 14)),
+                    pw.Text(
+                      '${logs.length}',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Total Employees', style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
-              ),
-            );
-          });
-        }
+                pw.Column(
+                  children: [
+                    pw.Text(
+                      '${logs.where((log) {
+                        final rawLogs = List<Map<String, dynamic>>.from(log['logs'] ?? []);
+                        return rawLogs.any((l) => l['type'] == 'In');
+                      }).length}',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Present', style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text(
+                      '${logs.length - logs.where((log) {
+                        final rawLogs = List<Map<String, dynamic>>.from(log['logs'] ?? []);
+                        return rawLogs.any((l) => l['type'] == 'In');
+                      }).length}',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Absent', style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  } else {
+    // Summary Report for Weekly/Monthly
+    final tableData = summary?.entries.map((entry) => [entry.key, entry.value]).toList() ?? [];
 
-        return content;
-      },
-    ),
-  );
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
+        build: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 20),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 1)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'ATTENDANCE SUMMARY',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(title, style: const pw.TextStyle(fontSize: 16)),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Generated on ${DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now())}',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 30),
+            pw.Text(
+              '$viewType Summary Report',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 15),
+            pw.Table.fromTextArray(
+              headers: ['Employee Name', 'Total Hours'],
+              data: tableData,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 14,
+              ),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              cellStyle: const pw.TextStyle(fontSize: 12),
+              cellAlignment: pw.Alignment.centerLeft,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3),
+                1: const pw.FlexColumnWidth(2),
+              },
+              cellDecoration: (index, data, rowNum) {
+                return pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.black, width: 0.5),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+
+
+
 
   await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
 }
 
+// Helper functions for backward compatibility
 String calculateTotalDurationFormatted(List<Map<String, dynamic>> logs) {
-  Duration total = Duration();
+  Duration total = Duration.zero;
 
   final ins = logs.where((log) => log['type'] == 'In').toList();
   final outs = logs.where((log) => log['type'] == 'Out').toList();
@@ -124,7 +306,6 @@ String calculateTotalDurationFormatted(List<Map<String, dynamic>> logs) {
     try {
       final inTime = parseTimeString(logs[i * 2]['time']);
       final outTime = parseTimeString(logs[i * 2 + 1]['time']);
-
       total += outTime.difference(inTime);
     } catch (_) {
       continue;
@@ -143,5 +324,5 @@ DateTime parseTimeString(String timeStr) {
 String formatDuration(Duration duration) {
   final hours = duration.inHours;
   final minutes = duration.inMinutes.remainder(60);
-  return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m';
+  return '${hours}h ${minutes}m';
 }

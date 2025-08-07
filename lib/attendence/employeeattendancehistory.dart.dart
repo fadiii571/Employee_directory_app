@@ -1,7 +1,4 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf;
 import 'package:student_projectry_app/Services/services.dart';
@@ -16,12 +13,35 @@ class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
 
 class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHistoryScreen> {
   DateTime selectedDate = DateTime.now();
-  String selectedEmployeeId = '';
+  String selectedSection = '';
   String viewType = 'Daily';
-  Map<String, String> employeeNames = {};
   List<Map<String, dynamic>> currentVisibleLogs = [];
 
+  // Available sections for filter
+  final List<String> availableSections = [
+    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
+    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+  ];
+
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
+
+  // Helper function to get section color
+  Color getSectionColor(String section) {
+    switch (section.toLowerCase()) {
+      case 'admin office': return Colors.purple;
+      case 'fancy': return Colors.pink;
+      case 'kk': return Colors.orange;
+      case 'anchor': return Colors.blue;
+      case 'soldering': return Colors.red;
+      case 'wire': return Colors.green;
+      case 'joint': return Colors.teal;
+      case 'v chain': return Colors.indigo;
+      case 'cutting': return Colors.brown;
+      case 'box chain': return Colors.cyan;
+      case 'polish': return Colors.amber;
+      default: return Colors.grey;
+    }
+  }
 
   Future<void> pickDate(BuildContext context) async {
     final picked = await showDatePicker(
@@ -144,41 +164,131 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
             padding: const EdgeInsets.all(12.0),
             child: Wrap(
               spacing: 12,
+              runSpacing: 8,
               children: [
-                DropdownButton<String>(
-                  value: viewType,
-                  items: ['Daily', 'Weekly', 'Monthly']
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => viewType = val);
-                  },
-                ),
-                if (employeeNames.isNotEmpty)
-                  DropdownButton<String>(
-                    value: selectedEmployeeId.isNotEmpty ? selectedEmployeeId : null,
-                    hint: const Text("All Employees"),
-                    items: employeeNames.entries
-                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() => selectedEmployeeId = val ?? '');
-                    },
+                // View Type Dropdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_view_day, size: 16, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: viewType,
+                        underline: const SizedBox(),
+                        items: ['Daily', 'Weekly', 'Monthly']
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => viewType = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                // Section Filter Dropdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.business, size: 16, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: selectedSection.isNotEmpty ? selectedSection : '',
+                        underline: const SizedBox(),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text("All Sections", style: TextStyle(fontWeight: FontWeight.w500))
+                          ),
+                          ...availableSections
+                              .map((section) => DropdownMenuItem(value: section, child: Text(section))),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            selectedSection = val ?? '';
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          // Filter Status Indicator
+          if (selectedSection.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.filter_alt, size: 16, color: Colors.blue.shade600),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Filtered: $selectedSection',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        selectedSection = '';
+                      });
+                    },
+                    child: Icon(
+                      Icons.clear,
+                      size: 16,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
               future: fetchAttendanceHistory(
                 selectedDate: selectedDate,
                 viewType: viewType,
-                selectedEmployeeId: selectedEmployeeId,
-                employeeNames: employeeNames,
+                selectedEmployeeId: '',
+                employeeNames: {},
+                selectedSection: selectedSection,
               ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text(
+                          'Loading attendance data...',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
                 }
 
                 final history = snapshot.data ?? {};
@@ -229,7 +339,34 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                                     : null,
                               ),
                               title: Text(record['name']),
-                              subtitle: buildLogList(logs),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: getSectionColor(record['section'] ?? 'Unknown'),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Section: ${record['section'] ?? 'Unknown'}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  buildLogList(logs),
+                                ],
+                              ),
                               trailing: viewType == 'Daily'
                                   ? Text(formatDuration(totalDuration),
                                       style: const TextStyle(fontWeight: FontWeight.bold))
@@ -258,7 +395,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
                   ],

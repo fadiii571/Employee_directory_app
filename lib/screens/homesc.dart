@@ -281,25 +281,32 @@ class _HomeState extends State<Home> {
                       ),
                     ),
                     SizedBox(height: 10),
-                    CircleAvatar(
-                      radius: 30,
-                      child: IconButton(
-                        icon: Icon(Icons.camera_alt),
-                        onPressed: () async {
-                          final uploaded = await uploadToFirebaseStorage();
-                          if (uploaded != null) {
-                            profileimageUrl = uploaded;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Profile uploaded")),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Upload failed")),
-                            );
-                          }
-                        },
-                      ),
-                    ),
+                   GestureDetector(
+  onTap: () async {
+    final uploaded = await uploadToFirebaseStorage();
+    if (uploaded != null) {
+      setState(() {
+        profileimageUrl = uploaded;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Profile uploaded")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Upload failed")),
+      );
+    }
+  },
+  child: CircleAvatar(
+    radius: 30,
+    backgroundImage:
+        profileimageUrl != null ? NetworkImage(profileimageUrl!) : null,
+    child: profileimageUrl == null
+        ? Icon(Icons.camera_alt, size: 20, color: Colors.grey)
+        : null,
+  ),
+),
+
                     SizedBox(height: 10),
                     buildTextField("Name", namecont),
                     SizedBox(height: 10),

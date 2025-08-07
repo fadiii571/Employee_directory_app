@@ -39,8 +39,8 @@ Future<void> Addemployee({
       "salary": salary,
       "section": section,
       "joiningDate": joiningDate,
-      "image": imageUrl,
-      "profileimage": profileimageUrl,
+      "imageUrl": imageUrl,
+      "profileImageUrl": profileimageUrl,
       "location": location,
       "latitude": latitude, 
       "longitude": longitude,
@@ -82,7 +82,7 @@ Future<String?> uploadToFirebaseStorage() async {
     } else {
       // Mobile image picker
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.camera);
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
       if (pickedFile == null) return null;
 
       final File file = File(pickedFile.path);
@@ -167,18 +167,7 @@ Future<void> markQRAttendance(String employeeId, String type) async {
   final now = DateTime.now();
   final time = DateFormat('hh:mm a').format(now);
 
-  // Calculate 4PM-based shift date
-  DateTime shiftDate;
-  if (now.hour < 16) {
-    // Before 4PM = previous day's shift
-    shiftDate = DateTime(now.year, now.month, now.day - 1, 16);
-  } else {
-    // 4PM or after = current day's shift
-    shiftDate = DateTime(now.year, now.month, now.day, 16);
-  }
-
-  final date = DateFormat('yyyy-MM-dd').format(shiftDate);
-
+  // Get employee section to determine shift type
   final empDoc = await FirebaseFirestore.instance
       .collection('Employees')
       .doc(employeeId)
@@ -189,6 +178,11 @@ Future<void> markQRAttendance(String employeeId, String type) async {
   }
 
   final empData = empDoc.data()!;
+  final section = empData['section'] ?? '';
+
+  // Calculate shift-aware working date based on section
+  DateTime shiftDate = _calculateShiftDate(now, section);
+  final date = DateFormat('yyyy-MM-dd').format(shiftDate);
   final recordRef = FirebaseFirestore.instance
       .collection('attendance')
       .doc(date)
@@ -252,8 +246,9 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
  Future<Map<String, List<Map<String, dynamic>>>> fetchAttendanceHistory({
   required DateTime selectedDate,
   required String viewType,
-  required String selectedEmployeeId,
-  required Map<String, String> employeeNames,
+  required String selectedEmployeeId, // Keep for compatibility but not used
+  required Map<String, String> employeeNames, // Keep for compatibility but not used
+  String selectedSection = '',
 }) async {
   final firestore = FirebaseFirestore.instance;
   final Map<String, List<Map<String, dynamic>>> history = {};
@@ -270,10 +265,26 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
     endDate = DateTime(selectedDate.year, selectedDate.month + 1, 0);
   }
 
-  final dateList = List.generate(
-    endDate.difference(startDate).inDays + 1,
-    (i) => DateFormat('yyyy-MM-dd').format(startDate.add(Duration(days: i))),
-  );
+  // PERFORMANCE FIX: Pre-load employee data for section filtering
+  Map<String, Map<String, dynamic>> employeeDataCache = {};
+  if (selectedSection.isNotEmpty) {
+    try {
+      // Filter employees by section at database level for maximum performance
+      final employeeSnapshot = await firestore
+          .collection('Employees')
+          .where('section', isEqualTo: selectedSection)
+          .get();
+
+      for (final doc in employeeSnapshot.docs) {
+        employeeDataCache[doc.id] = doc.data() as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error loading employee data: $e');
+    }
+  }
+
+  // UPDATED: Generate shift-aware date list for attendance lookup
+  final dateList = await _generateShiftAwareDateList(startDate, endDate, '');
 
   for (final date in dateList) {
     final docRef = firestore.collection('attendance').doc(date).collection('records');
@@ -286,8 +297,19 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
     for (final doc in snapshot.docs) {
       final data = doc.data();
 
-      if (selectedEmployeeId.isNotEmpty && selectedEmployeeId != doc.id) {
-        continue;
+      // PERFORMANCE FIX: Use cached employee data for section filtering
+      String employeeSection = 'Unknown';
+      if (selectedSection.isNotEmpty) {
+        // If section filter is active, only process employees in cache (pre-filtered by section)
+        if (employeeDataCache.containsKey(doc.id)) {
+          employeeSection = employeeDataCache[doc.id]?['section'] ?? 'Unknown';
+        } else {
+          // Employee not in selected section, skip
+          continue;
+        }
+      } else {
+        // No section filter, try to get section from global cache or mark as unknown
+        employeeSection = _employeeCache[doc.id]?['section'] ?? 'Unknown';
       }
 
       final logs = List<Map<String, dynamic>>.from(data['logs'] ?? []);
@@ -314,6 +336,7 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
 
       dayRecords.add({
         'name': name,
+        'section': employeeSection,
         'profileImageUrl': profileImageUrl,
         'logs': logs,
         'checkIn': checkInTime?.toIso8601String(),
@@ -335,6 +358,61 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
   }
 
   return history;
+}
+
+/// Generate shift-aware date list for attendance history lookup
+Future<List<String>> _generateShiftAwareDateList(
+  DateTime startDate,
+  DateTime endDate,
+  String selectedEmployeeId
+) async {
+  final firestore = FirebaseFirestore.instance;
+  final Set<String> uniqueDates = {};
+
+  // If specific employee selected, get their section for shift-aware dates
+  String? employeeSection;
+  if (selectedEmployeeId.isNotEmpty) {
+    try {
+      final empDoc = await firestore.collection('Employees').doc(selectedEmployeeId).get();
+      if (empDoc.exists) {
+        employeeSection = empDoc.data()?['section'];
+      }
+    } catch (e) {
+      print('Error fetching employee section: $e');
+    }
+  }
+
+  // Generate date range
+  DateTime currentDate = startDate;
+  while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
+    if (employeeSection != null) {
+      // Use shift-aware date calculation for specific employee
+      final shiftDate = _calculateShiftDate(
+        DateTime(currentDate.year, currentDate.month, currentDate.day, 12), // Use noon as reference
+        employeeSection,
+      );
+      uniqueDates.add(DateFormat('yyyy-MM-dd').format(shiftDate));
+    } else {
+      // For "All Employees" view, include both regular dates and potential shift dates
+      // This ensures we catch attendance from all sections
+
+      // Regular calendar date
+      uniqueDates.add(DateFormat('yyyy-MM-dd').format(currentDate));
+
+      // Also include shift-aware dates for special sections
+      for (final section in ['Fancy', 'KK', 'Admin office']) {
+        final shiftDate = _calculateShiftDate(
+          DateTime(currentDate.year, currentDate.month, currentDate.day, 12),
+          section,
+        );
+        uniqueDates.add(DateFormat('yyyy-MM-dd').format(shiftDate));
+      }
+    }
+
+    currentDate = currentDate.add(const Duration(days: 1));
+  }
+
+  return uniqueDates.toList()..sort();
 }
 
 String _formatDuration(Duration duration) {
@@ -590,15 +668,15 @@ Future<AttendanceKPI> calculateEmployeeAttendanceKPI({
   // Get section shift configuration
   final sectionShift = SectionShiftService.getSectionShift(section);
 
-  // Calculate 4PM-based shift dates (align with payroll logic)
+  // Calculate shift dates using consistent 4PM-4PM logic for all sections
   List<String> shiftDates = [];
   DateTime currentDate = startDate;
 
   while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
-    // Create 4PM shift date for this day
+    // Use 4PM-4PM logic for all sections (consistent with attendance marking)
     final shiftStart = DateTime(currentDate.year, currentDate.month, currentDate.day, 16);
 
-    // Skip Sunday 4PM–Monday 4PM shifts (company holiday - same as payroll)
+    // Skip Sunday shifts (company holiday - same as payroll)
     if (shiftStart.weekday != DateTime.sunday) {
       final shiftDateString = DateFormat('yyyy-MM-dd').format(shiftStart);
       shiftDates.add(shiftDateString);
@@ -741,6 +819,9 @@ Future<SectionAttendanceSummary> calculateSectionAttendanceSummary({
 // Cache for KPI data to avoid recalculation
 final Map<String, Map<String, dynamic>> _kpiCache = {};
 
+// Cache for attendance history to avoid repeated queries
+final Map<String, Map<String, List<Map<String, dynamic>>>> _attendanceHistoryCache = {};
+
 /// OPTIMIZED: Get attendance KPI data with caching and parallel processing
 Future<Map<String, dynamic>> getAttendanceKPIData(KPIFilter filter) async {
   // Create cache key based on filter parameters
@@ -815,6 +896,7 @@ Future<Map<String, dynamic>> getAttendanceKPIData(KPIFilter filter) async {
 void clearKPICache() {
   _kpiCache.clear();
   _employeeCache.clear();
+  _attendanceHistoryCache.clear();
 }
 
 /// OPTIMIZATION: Preload all employee data to cache
@@ -928,6 +1010,89 @@ DateTime get4PMShiftDate(DateTime dateTime) {
   } else {
     // 4PM or after = current day's shift
     return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
+  }
+}
+
+/// Calculate shift date using 4PM to 4PM logic with extended checkout for special sections
+/// Admin Office, KK, and Fancy can checkout until 6PM next day but stored under shift start date
+DateTime _calculateShiftDate(DateTime now, String section) {
+  final sectionLower = section.toLowerCase();
+
+  // Special handling for Admin Office, KK, and Fancy (extended checkout until 6PM next day)
+  if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
+    if (now.hour < 16) {
+      // Before 4PM = could be extended checkout from previous day's shift OR new day
+      if (now.hour <= 18) {
+        // Before 6PM = extended checkout from previous day's shift
+        return DateTime(now.year, now.month, now.day - 1, 16);
+      } else {
+        // After 6PM = previous day's shift
+        return DateTime(now.year, now.month, now.day - 1, 16);
+      }
+    } else {
+      // 4PM or after = current day's shift
+      return DateTime(now.year, now.month, now.day, 16);
+    }
+  } else {
+    // Standard sections: 4PM to 4PM logic
+    if (now.hour < 16) {
+      // Before 4PM = previous day's shift
+      return DateTime(now.year, now.month, now.day - 1, 16);
+    } else {
+      // 4PM or after = current day's shift
+      return DateTime(now.year, now.month, now.day, 16);
+    }
+  }
+}
+
+/// Test function to demonstrate 4PM-4PM shift logic with extended checkout
+void testShiftDateCalculation() {
+  final testTime1 = DateTime(2024, 8, 6, 16, 0); // 4:00 PM Aug 6 (Check-in)
+  final testTime2 = DateTime(2024, 8, 7, 18, 0); // 6:00 PM Aug 7 (Extended checkout)
+  final testTime3 = DateTime(2024, 8, 7, 16, 0); // 4:00 PM Aug 7 (Standard checkout)
+
+  print('=== 4PM-4PM Shift Logic with Extended Checkout Test ===');
+  print('Test Time 1: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime1)} (Check-in 4PM Aug 6)');
+  print('Test Time 2: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime2)} (Extended checkout 6PM Aug 7)');
+  print('Test Time 3: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime3)} (Standard checkout 4PM Aug 7)');
+  print('');
+
+  for (final section in ['Admin office', 'Fancy', 'KK', 'Other']) {
+    print('Section: $section');
+    if (section == 'Admin office' || section == 'Fancy' || section == 'KK') {
+      print('  Type: 4PM-4PM with extended checkout until 6PM next day');
+    } else {
+      print('  Type: Standard 4PM-4PM');
+    }
+    print('  4PM Aug 6 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime1, section))}');
+    print('  6PM Aug 7 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime2, section))}');
+    print('  4PM Aug 7 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime3, section))}');
+    print('');
+  }
+}
+
+/// Test function for attendance history date generation
+Future<void> testAttendanceHistoryDates() async {
+  final startDate = DateTime(2024, 1, 15);
+  final endDate = DateTime(2024, 1, 17);
+
+  print('=== Attendance History Date Generation Test ===');
+  print('Date Range: ${DateFormat('yyyy-MM-dd').format(startDate)} to ${DateFormat('yyyy-MM-dd').format(endDate)}');
+  print('');
+
+  // Test for specific employee (Fancy section)
+  print('For Fancy Employee:');
+  final fancyDates = await _generateShiftAwareDateList(startDate, endDate, 'fancy_employee_id');
+  for (final date in fancyDates) {
+    print('  Search Date: $date');
+  }
+  print('');
+
+  // Test for all employees
+  print('For All Employees:');
+  final allDates = await _generateShiftAwareDateList(startDate, endDate, '');
+  for (final date in allDates) {
+    print('  Search Date: $date');
   }
 }
 

@@ -63,6 +63,10 @@ class EmployeeDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Debug: Print image URLs to console
+    print('Profile Image URL: "${employee.profileImageUrl}"');
+    print('Main Image URL: "${employee.imageUrl}"');
+
     return Scaffold(
       appBar: AppBar(title: Text(employee.name)),
       body: SafeArea(
@@ -71,13 +75,25 @@ class EmployeeDetailPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Hero(
-                tag: 'profile-${employee.profileImageUrl}',
-                child: CircleAvatar(
-                  radius: 50,
-                  backgroundImage: NetworkImage(employee.profileImageUrl),
-                ),
-              ),
+          Hero(
+  tag: 'profile_${employee.profileImageUrl}',
+  child: CircleAvatar(
+    radius: 50,
+    backgroundColor: Colors.grey[300],
+    backgroundImage: (employee.profileImageUrl.isNotEmpty)
+        ? NetworkImage(employee.profileImageUrl)
+        : null,
+    child: (employee.profileImageUrl.isEmpty)
+        ? const Icon(Icons.person, size: 40, color: Colors.grey)
+        : null,
+    onBackgroundImageError: (exception, stackTrace) {
+      // Handle image loading error
+      print('Error loading profile image: $exception');
+    },
+  ),
+),
+
+
               const SizedBox(height: 20),
 
               _infoCard("Contact", [
