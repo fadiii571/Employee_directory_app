@@ -20,7 +20,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
   // Available sections for filter
   final List<String> availableSections = [
     'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
   ];
 
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -39,6 +39,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
       case 'cutting': return Colors.brown;
       case 'box chain': return Colors.cyan;
       case 'polish': return Colors.amber;
+      case 'supervisors': return Colors.deepPurple;
       default: return Colors.grey;
     }
   }
@@ -320,9 +321,22 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             color: Colors.grey.shade200,
                             width: double.infinity,
-                            child: Text(
-                              DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(date)),
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(date)),
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  'Shift Date: $date (4PM-4PM shift)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           ...history[date]!.map((record) {

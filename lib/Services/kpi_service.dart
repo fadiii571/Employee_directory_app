@@ -68,23 +68,30 @@ class KPIService {
       // Get section shift configuration
       final sectionShift = await SectionShiftService.getSectionShift(section);
 
-      // Calculate shift dates using consistent 4PM-4PM logic
-      final shiftDates = _generateShiftAwareDateList(startDate, endDate);
-      
+      // Calculate dates based on section type
+      List<DateTime> workingDates;
+      if (section.toLowerCase() == 'supervisors') {
+        // Supervisors use calendar dates (9AM-9PM)
+        workingDates = _generateCalendarDateList(startDate, endDate);
+      } else {
+        // Other sections use shift dates (4PM-4PM)
+        workingDates = _generateShiftAwareDateList(startDate, endDate);
+      }
+
       // Get paid leave data for the period
       final paidLeaveData = await _getBatchPaidLeaveData(employeeId, startDate, endDate);
 
       // Initialize counters
-      int totalWorkingDays = shiftDates.length;
+      int totalWorkingDays = workingDates.length;
       int presentDays = 0;
       int absentDays = 0;
       int lateArrivals = 0;
       int onTimeArrivals = 0;
       int earlyArrivals = 0;
 
-      // Process each shift date
-      for (final shiftDate in shiftDates) {
-        final attendanceRecord = await _getAttendanceRecord(employeeId, shiftDate);
+      // Process each working date
+      for (final workingDate in workingDates) {
+        final attendanceRecord = await _getAttendanceRecord(employeeId, workingDate);
 
         if (attendanceRecord != null) {
           final logs = List<Map<String, dynamic>>.from(attendanceRecord['logs'] ?? []);
@@ -117,7 +124,7 @@ class KPIService {
           }
         } else {
           // Check for paid leave
-          final dateString = DateFormat('yyyy-MM-dd').format(shiftDate);
+          final dateString = DateFormat('yyyy-MM-dd').format(workingDate);
           if (!paidLeaveData.contains(dateString)) {
             absentDays++;
           }
@@ -404,6 +411,20 @@ class KPIService {
 
   /// Generate shift-aware date list for attendance lookup
   static List<DateTime> _generateShiftAwareDateList(DateTime startDate, DateTime endDate) {
+    final List<DateTime> dates = [];
+    DateTime currentDate = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = DateTime(endDate.year, endDate.month, endDate.day);
+
+    while (currentDate.isBefore(end) || currentDate.isAtSameMomentAs(end)) {
+      dates.add(currentDate);
+      currentDate = currentDate.add(const Duration(days: 1));
+    }
+
+    return dates;
+  }
+
+  /// Generate calendar date list for supervisors (9AM-9PM schedule)
+  static List<DateTime> _generateCalendarDateList(DateTime startDate, DateTime endDate) {
     final List<DateTime> dates = [];
     DateTime currentDate = DateTime(startDate.year, startDate.month, startDate.day);
     final end = DateTime(endDate.year, endDate.month, endDate.day);

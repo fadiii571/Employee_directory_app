@@ -33,7 +33,7 @@ import 'kpi_service.dart';
 /// Standard sections available in the system
 const List<String> AVAILABLE_SECTIONS = [
   'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-  'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+  'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
 ];
 
 /// Fixed working days per month for payroll calculations
@@ -222,7 +222,42 @@ Future<void> markQRAttendance(String employeeId, String type) async {
   final empData = empDoc.data()!;
   final section = empData['section'] ?? '';
 
-  // Calculate shift-aware working date based on section
+  // Handle Supervisors section differently (9AM-9PM calendar dates)
+  if (section.toLowerCase() == 'supervisors') {
+    // For supervisors, use calendar date instead of shift date
+    final calendarDate = DateTime(now.year, now.month, now.day);
+    final date = DateFormat('yyyy-MM-dd').format(calendarDate);
+
+    final recordRef = FirebaseFirestore.instance
+        .collection('attendance')
+        .doc(date)
+        .collection('records')
+        .doc(employeeId);
+
+    final snapshot = await recordRef.get();
+
+    if (snapshot.exists) {
+      await recordRef.update({
+        'logs': FieldValue.arrayUnion([
+          {'time': time, 'type': type}
+        ])
+      });
+    } else {
+      await recordRef.set({
+        'name': empData['name'],
+        'id': employeeId,
+        'section': section,
+        'workSchedule': '9AM-9PM',
+        'profileImageUrl': empData['profileImageUrl'],
+        'logs': [
+          {'time': time, 'type': type}
+        ]
+      });
+    }
+    return;
+  }
+
+  // Calculate shift-aware working date based on section (for non-supervisor sections)
   DateTime shiftDate = _calculateShiftDate(now, section);
   final date = DateFormat('yyyy-MM-dd').format(shiftDate);
   final recordRef = FirebaseFirestore.instance

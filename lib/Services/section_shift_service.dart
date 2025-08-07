@@ -81,6 +81,11 @@ class SectionShiftService {
       checkInTime: '09:00',
       gracePeriodMinutes: 0,
     ),
+    'Supervisors': SectionShift(
+      sectionName: 'Supervisors',
+      checkInTime: '09:00',
+      gracePeriodMinutes: 0,
+    ),
   };
 
   // ==================== PUBLIC API METHODS ====================

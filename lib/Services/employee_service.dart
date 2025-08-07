@@ -20,8 +20,8 @@ class EmployeeService {
   
   /// Available sections in the system
   static const List<String> availableSections = [
-    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering', 
-    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
+    'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
+    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
   ];
 
   // ==================== CACHE MANAGEMENT ====================

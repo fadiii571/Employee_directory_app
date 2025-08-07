@@ -15,6 +15,7 @@ import 'package:student_projectry_app/payroll/payrollscreen2.dart';
 import 'package:student_projectry_app/screens/qrscreen.dart';
 import 'package:student_projectry_app/screens/kpi_dashboard.dart';
 import 'package:student_projectry_app/screens/section_shift_config.dart';
+import 'package:student_projectry_app/screens/admin_office_shift_rotation_screen.dart';
 import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class Home extends StatefulWidget {
@@ -751,6 +752,19 @@ class _HomeState extends State<Home> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => SectionShiftConfigScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.swap_horiz),
+                title: Text("Admin Office Rotation"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AdminOfficeShiftRotationScreen(),
                     ),
                   );
                 },
