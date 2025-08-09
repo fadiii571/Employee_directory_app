@@ -13,9 +13,10 @@ import 'package:student_projectry_app/screens/detail.dart';
 
 import 'package:student_projectry_app/payroll/payrollscreen2.dart';
 import 'package:student_projectry_app/screens/qrscreen.dart';
-import 'package:student_projectry_app/screens/kpi_dashboard.dart';
-import 'package:student_projectry_app/screens/section_shift_config.dart';
-import 'package:student_projectry_app/screens/admin_office_shift_rotation_screen.dart';
+import 'package:student_projectry_app/dashboard/attendance_dashboard.dart';
+
+
+
 import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class Home extends StatefulWidget {
@@ -494,6 +495,7 @@ class _HomeState extends State<Home> {
                                     'Cutting',
                                     'Box chain',
                                     'Polish',
+                                    'Supervisors',
                                   ]
                                   .map(
                                     (section) => DropdownMenuItem(
@@ -680,6 +682,7 @@ class _HomeState extends State<Home> {
                   'Cutting',
                   'Box chain',
                   'Polish',
+                  'Supervisors',
                 ].map((s) => DropdownMenuItem(value: s, child: Text(s))),
               ],
               onChanged: (val) => setState(() => selectedSection = val),
@@ -702,6 +705,19 @@ class _HomeState extends State<Home> {
                 leading: Icon(Icons.person),
                 title: Text("Employees"),
                 onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: Icon(Icons.dashboard),
+                title: Text("Attendance Dashboard"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AttendanceDashboard(),
+                    ),
+                  );
+                },
               ),
               Divider(),
               ListTile(
@@ -730,45 +746,9 @@ class _HomeState extends State<Home> {
                 },
               ),
               Divider(),
-              ListTile(
-                leading: Icon(Icons.analytics),
-                title: Text("KPI Dashboard"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AttendanceKPIDashboard(),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.schedule),
-                title: Text("Section Shift Config"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SectionShiftConfigScreen(),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.swap_horiz),
-                title: Text("Admin Office Rotation"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AdminOfficeShiftRotationScreen(),
-                    ),
-                  );
-                },
-              ),
+
+
+             
               Divider(),
               ListTile(
                 leading: Icon(Icons.payment),
@@ -824,9 +804,11 @@ class _HomeState extends State<Home> {
                         currentTabIndex == 0;
                   }).toList();
 
-              return ListView.builder(
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
+              return SizedBox(
+                height: MediaQuery.of(context).size.height - 200, // Constrain height
+                child: ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
                   Employee emp = Employee.fromMap(
                     docs[index].data() as Map<String, dynamic>,
                   );
@@ -898,16 +880,17 @@ class _HomeState extends State<Home> {
                           ),
                     ),
                   );
-                },
+                  },
+                ),
               );
             },
           ),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: showAddEmployeeDialog,
-          child: Icon(Icons.add),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
+          child: Icon(Icons.add),
         ),
       ),
     );

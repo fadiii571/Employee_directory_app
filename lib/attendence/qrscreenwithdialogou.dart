@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:intl/intl.dart';
 import 'package:student_projectry_app/Services/services.dart';
+import 'package:student_projectry_app/widgets/qrcodegen.dart';
 
 class QRScanAttendanceScreendialogou extends StatefulWidget {
   const QRScanAttendanceScreendialogou({super.key});
@@ -23,64 +24,128 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
     super.dispose();
   }
 
-  Future<void> handleScan(BuildContext context, String scannedId) async {
+  Future<void> handleScan(BuildContext context, String scannedData) async {
     try {
-      final empData = await getEmployeeByIdforqr(scannedId);
+      // Validate QR code format
+      if (!QRCodeGenerator.isValidEmployeeQR(scannedData)) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Invalid QR code format")),
+          );
+        }
+        return;
+      }
 
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text("Mark Attendance"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundImage: NetworkImage(empData['profileImageUrl'] ?? ''),
-              ),
-              const SizedBox(height: 10),
-              Text(empData['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.login),
-                    label: const Text("Check In"),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await markQRAttendance(scannedId, "In", empData);
-                    },
-                  ),
-                  SizedBox(width: 10,),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.logout),
-                    label: const Text("Check Out"),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await markQRAttendance(scannedId, "Out", empData);
-                    },
-                  ),
-                ],
-              )
-            ],
+      // Extract employee ID from QR data
+      final employeeId = QRCodeGenerator.extractEmployeeId(scannedData);
+
+      // Debug logging
+      debugPrint('Scanned QR Data: $scannedData');
+      debugPrint('Extracted Employee ID: $employeeId');
+
+      final empData = await getEmployeeByIdforqr(employeeId);
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text("Mark Attendance"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundImage: empData['profileImageUrl'] != null && empData['profileImageUrl'].isNotEmpty
+                      ? NetworkImage(empData['profileImageUrl'])
+                      : null,
+                  child: empData['profileImageUrl'] == null || empData['profileImageUrl'].isEmpty
+                      ? const Icon(Icons.person, size: 40)
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                Text(empData['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('ID: $employeeId', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                if (empData['section'] != null)
+                  Text('Section: ${empData['section']}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.login),
+                      label: const Text("Check In"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await markQRAttendance(employeeId, "Check In", empData);
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.logout),
+                      label: const Text("Check Out"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await markQRAttendance(employeeId, "Check Out", empData);
+                      },
+                    ),
+                  ],
+                )
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      debugPrint('Error in handleScan: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
+      }
+    }
+  }
+
+  /// Calculate shift date using 4PM-4PM logic with extended checkout for special sections
+  /// Admin Office, KK, and Fancy can checkout until 6PM next day but stored under shift start date
+  DateTime _calculateShiftDate(DateTime now, String section) {
+    final sectionLower = section.toLowerCase();
+
+    // Special handling for Admin Office, KK, and Fancy (extended checkout until 6PM next day)
+    if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
+      if (now.hour < 16) {
+        // Before 4PM = could be extended checkout from previous day's shift
+        if (now.hour <= 18) {
+          // Before or at 6PM = extended checkout from previous day's shift
+          return DateTime(now.year, now.month, now.day - 1, 16);
+        } else {
+          // After 6PM = previous day's shift
+          return DateTime(now.year, now.month, now.day - 1, 16);
+        }
+      } else {
+        // 4PM or after = current day's shift
+        return DateTime(now.year, now.month, now.day, 16);
+      }
+    }
+
+    // Standard 4PM-4PM logic for all other sections
+    if (now.hour < 16) {
+      // Before 4PM = previous day's shift
+      return DateTime(now.year, now.month, now.day - 1, 16);
+    } else {
+      // 4PM or after = current day's shift
+      return DateTime(now.year, now.month, now.day, 16);
     }
   }
 
   Future<void> markQRAttendance(String employeeId, String type, Map<String, dynamic> empData) async {
     final now = DateTime.now();
+    final section = empData['section'] ?? '';
 
-    // Shift logic: Start from 4 PM today to 3:59 PM next day
-    final shiftStart = DateTime(now.year, now.month, now.day, 16);
-    final effectiveShiftDate = now.isBefore(shiftStart) ? now.subtract(Duration(days: 1)) : now;
-    final shiftDateKey = DateFormat('yyyy-MM-dd').format(effectiveShiftDate);
+    // Use the same shift calculation logic as the main services
+    final shiftDate = _calculateShiftDate(now, section);
+    final shiftDateKey = DateFormat('yyyy-MM-dd').format(shiftDate);
 
     final timeNowFormatted = DateFormat('hh:mm a').format(now);
 
@@ -105,16 +170,22 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
       await recordRef.update({
         'logs': FieldValue.arrayUnion([
           {'type': type, 'time': timeNowFormatted}
-        ])
+        ]),
+        'lastUpdated': FieldValue.serverTimestamp(),
       });
     } else {
       await recordRef.set({
-        'name': empData['name'],
-        'id': employeeId,
-        'profileImageUrl': empData['profileImageUrl'],
+        'employeeId': employeeId,
+        'employeeName': empData['name'],
+        'name': empData['name'], // Keep both for compatibility
+        'section': section,
+        'profileImageUrl': empData['profileImageUrl'] ?? '',
+        'shiftDate': shiftDateKey,
         'logs': [
           {'type': type, 'time': timeNowFormatted}
-        ]
+        ],
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastUpdated': FieldValue.serverTimestamp(),
       });
     }
 

@@ -196,7 +196,7 @@ class SupervisorAttendanceService {
         );
         
         if (checkInLog.isNotEmpty) {
-          final checkInTime = checkInLog['time'] as String;
+          final checkInTime = checkInLog['time']?.toString() ?? '';
           if (_isSupervisorLate(checkInTime)) {
             lateArrivals++;
           } else {

@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:student_projectry_app/screens/splash.dart';
-import 'package:student_projectry_app/Services/section_shift_service.dart';
+
 import 'firebase_options.dart';
 
 /// Main entry point of the Student Project Management App
 ///
 /// This app manages:
 /// - Employee attendance tracking with QR codes
-/// - Section-specific shift configurations
-/// - KPI calculations and reporting
+
 /// - Payroll management with 30-day fixed cycles
 /// - PDF report generation
 void main() async {
@@ -28,9 +27,7 @@ Future<void> _initializeApp() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize section shift service to load configurations
-  // This populates the cache with shift settings for KPI calculations
-  await SectionShiftService.initialize();
+
 }
 
 /// Root widget of the Student Project Management App

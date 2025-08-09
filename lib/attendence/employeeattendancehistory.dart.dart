@@ -16,6 +16,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
   String selectedSection = '';
   String viewType = 'Daily';
   List<Map<String, dynamic>> currentVisibleLogs = [];
+  bool _isInitialized = false;
 
   // Available sections for filter
   final List<String> availableSections = [
@@ -24,6 +25,27 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
   ];
 
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeData();
+  }
+
+  /// Initialize employee cache for better performance
+  Future<void> _initializeData() async {
+    if (!_isInitialized) {
+      try {
+        await preloadEmployeeData();
+        setState(() {
+          _isInitialized = true;
+        });
+        debugPrint('✅ Employee data preloaded for attendance history');
+      } catch (e) {
+        debugPrint('❌ Error preloading employee data: $e');
+      }
+    }
+  }
 
   // Helper function to get section color
   Color getSectionColor(String section) {
@@ -62,17 +84,35 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
 
   logs.removeWhere((log) => log['time'] == null); // 🚨 Prevent parsing null
 
+  // Debug: Print log types if there are issues
+  if (logs.isNotEmpty) {
+    debugPrint('Log types found: ${logs.map((log) => log['type']).toSet().toList()}');
+  }
+
   logs.sort((a, b) {
-    final timeA = DateFormat('hh:mm a').parse(a['time']);
-    final timeB = DateFormat('hh:mm a').parse(b['time']);
-    return timeA.compareTo(timeB);
+    try {
+      final timeA = _parseTimeString(a['time']?.toString() ?? '');
+      final timeB = _parseTimeString(b['time']?.toString() ?? '');
+
+      if (timeA == null || timeB == null) return 0;
+      return timeA.compareTo(timeB);
+    } catch (e) {
+      return 0; // Keep original order if parsing fails
+    }
   });
 
-  final inLogs = logs.where((log) => log['type'] == 'In').toList();
-  final outLogs = logs.where((log) => log['type'] == 'Out').toList();
+  // Handle both old and new log type formats
+  final inLogs = logs.where((log) =>
+    log['type'] == 'Check In' || log['type'] == 'In'
+  ).toList();
+  final outLogs = logs.where((log) =>
+    log['type'] == 'Check Out' || log['type'] == 'Out'
+  ).toList();
 
-  final inTimes = inLogs.map((log) => log['time']).join(', ');
-  final outTimes = outLogs.map((log) => log['time']).join(', ');
+  debugPrint('Found ${inLogs.length} check-in logs and ${outLogs.length} check-out logs');
+
+  final inTimes = inLogs.map((log) => _formatTimeTo12Hour(log['time'])).join(', ');
+  final outTimes = outLogs.map((log) => _formatTimeTo12Hour(log['time'])).join(', ');
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,32 +127,59 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
 
 
  Duration calculateTotalDuration(List logs) {
-  if (logs.isEmpty) return Duration.zero;
+  if (logs.isEmpty) {
+    return Duration.zero;
+  }
 
-  // Filter valid logs
-  final inLog = logs.firstWhere(
-    (log) => log['type'] == 'In' && log['time'] != null,
+  // Find check-in and check-out logs (handle both old and new formats)
+  final checkInLog = logs.firstWhere(
+    (log) => (log['type'] == 'Check In' || log['type'] == 'In') && log['time'] != null,
     orElse: () => <String, dynamic>{},
   );
 
-  final outLog = logs.firstWhere(
-    (log) => log['type'] == 'Out' && log['time'] != null,
+  final checkOutLog = logs.firstWhere(
+    (log) => (log['type'] == 'Check Out' || log['type'] == 'Out') && log['time'] != null,
     orElse: () => <String, dynamic>{},
   );
 
-  final timeFormat = DateFormat('hh:mm a');
+  // If either check-in or check-out is missing, return zero
+  if (checkInLog.isEmpty || checkOutLog.isEmpty) {
+    return Duration.zero;
+  }
 
   try {
-    final checkInTime = timeFormat.parse(inLog['time']);
-    final checkOutTime = timeFormat.parse(outLog['time']);
+    final checkInTimeStr = checkInLog['time'].toString().trim();
+    final checkOutTimeStr = checkOutLog['time'].toString().trim();
 
-    // ✅ Add one day if check-out is on next day (e.g., night shift)
-    final adjustedOutTime = checkOutTime.isBefore(checkInTime)
-        ? checkOutTime.add(Duration(days: 1))
-        : checkOutTime;
+    // Parse times with multiple format support
+    final checkInTime = _parseTimeString(checkInTimeStr);
+    final checkOutTime = _parseTimeString(checkOutTimeStr);
 
-    return adjustedOutTime.difference(checkInTime);
+    if (checkInTime == null || checkOutTime == null) {
+      debugPrint('Failed to parse times: checkIn="$checkInTimeStr", checkOut="$checkOutTimeStr"');
+      return Duration.zero;
+    }
+
+    // Create DateTime objects for the same day to calculate duration properly
+    final today = DateTime.now();
+    final checkInDateTime = DateTime(today.year, today.month, today.day, checkInTime.hour, checkInTime.minute);
+    final checkOutDateTime = DateTime(today.year, today.month, today.day, checkOutTime.hour, checkOutTime.minute);
+
+    // Handle cross-day scenarios (e.g., check-in at 3:00 AM, check-out at 9:00 AM)
+    Duration totalDuration;
+    if (checkOutDateTime.isBefore(checkInDateTime)) {
+      // Check-out is next day (e.g., check-in 3:00 AM, check-out 9:00 AM next day)
+      final nextDayCheckOut = checkOutDateTime.add(const Duration(days: 1));
+      totalDuration = nextDayCheckOut.difference(checkInDateTime);
+    } else {
+      // Same day check-in and check-out
+      totalDuration = checkOutDateTime.difference(checkInDateTime);
+    }
+
+    // Ensure we don't return negative duration
+    return totalDuration.isNegative ? Duration.zero : totalDuration;
   } catch (e) {
+    debugPrint('Error calculating duration: $e');
     return Duration.zero;
   }
 }
@@ -122,6 +189,68 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
     int hours = duration.inHours;
     int minutes = duration.inMinutes.remainder(60);
     return "${hours}h ${minutes}m";
+  }
+
+  /// Safely get profile image URL from record
+  String _getProfileImageUrl(Map<String, dynamic> record) {
+    final profileImageUrl = record['profileImageUrl'];
+    if (profileImageUrl == null) return '';
+    if (profileImageUrl is String) return profileImageUrl;
+    if (profileImageUrl is int) return ''; // If it's an int (timestamp), return empty
+    return profileImageUrl.toString();
+  }
+
+  /// Safely get employee name from record
+  String _getEmployeeName(Map<String, dynamic> record) {
+    final name = record['name'];
+    if (name == null) return 'Unknown';
+    if (name is String) return name;
+    return name.toString();
+  }
+
+  /// Parse time string with multiple format support
+  DateTime? _parseTimeString(String timeStr) {
+    if (timeStr.isEmpty) return null;
+
+    // List of possible time formats
+    final formats = [
+      DateFormat('hh:mm a'),    // 03:01 AM
+      DateFormat('HH:mm'),      // 03:01 (24-hour)
+      DateFormat('h:mm a'),     // 3:01 AM
+      DateFormat('H:mm'),       // 3:01 (24-hour)
+      DateFormat('hh:mm'),      // 03:01 (12-hour without AM/PM)
+    ];
+
+    for (final format in formats) {
+      try {
+        return format.parse(timeStr);
+      } catch (e) {
+        // Try next format
+        continue;
+      }
+    }
+
+    debugPrint('Could not parse time string: "$timeStr"');
+    return null;
+  }
+
+  /// Format time to 12-hour format (AM/PM)
+  String _formatTimeTo12Hour(dynamic timeValue) {
+    if (timeValue == null) return '-';
+
+    final timeStr = timeValue.toString().trim();
+    if (timeStr.isEmpty) return '-';
+
+    // If already in 12-hour format, return as is
+    if (timeStr.toLowerCase().contains('am') || timeStr.toLowerCase().contains('pm')) {
+      return timeStr;
+    }
+
+    // Parse the time and convert to 12-hour format
+    final parsedTime = _parseTimeString(timeStr);
+    if (parsedTime == null) return timeStr; // Return original if parsing fails
+
+    return DateFormat('h:mm a').format(parsedTime);
   }
 
   @override
@@ -345,14 +474,14 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
 
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundImage: (record['profileImageUrl'] as String).isNotEmpty
-                                    ? NetworkImage(record['profileImageUrl'])
+                                backgroundImage: _getProfileImageUrl(record).isNotEmpty
+                                    ? NetworkImage(_getProfileImageUrl(record))
                                     : null,
-                                child: (record['profileImageUrl'] as String).isEmpty
-                                    ? Text(record['name'][0])
+                                child: _getProfileImageUrl(record).isEmpty
+                                    ? Text(_getEmployeeName(record)[0])
                                     : null,
                               ),
-                              title: Text(record['name']),
+                              title: Text(_getEmployeeName(record)),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -381,10 +510,27 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                                   buildLogList(logs),
                                 ],
                               ),
-                              trailing: viewType == 'Daily'
-                                  ? Text(formatDuration(totalDuration),
-                                      style: const TextStyle(fontWeight: FontWeight.bold))
-                                  : null,
+                              trailing: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    formatDuration(totalDuration),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Total Hours',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
                           }),
                         ],
@@ -399,6 +545,46 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                             child: Text(
                               "Summary (Total Duration per Employee)",
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                          ...summaryMap.entries.map((entry) {
+                            return ListTile(
+                              title: Text(entry.key),
+                              trailing: Text(
+                                formatDuration(entry.value),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    if (viewType != 'Daily')
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            color: Colors.blue.shade50,
+                            width: double.infinity,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$viewType Summary',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Total working hours by employee',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           ...summaryMap.entries.map((entry) {

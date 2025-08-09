@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:student_projectry_app/imageview/imageview.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
+import 'package:student_projectry_app/widgets/cached_network_image_widget.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -63,10 +64,6 @@ class EmployeeDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: Print image URLs to console
-    print('Profile Image URL: "${employee.profileImageUrl}"');
-    print('Main Image URL: "${employee.imageUrl}"');
-
     return Scaffold(
       appBar: AppBar(title: Text(employee.name)),
       body: SafeArea(
@@ -76,20 +73,11 @@ class EmployeeDetailPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
           Hero(
-  tag: 'profile_${employee.profileImageUrl}',
-  child: CircleAvatar(
+  tag: 'profile_${employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : employee.name}',
+  child: CachedNetworkImageWidget.avatar(
+    imageUrl: employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : null,
     radius: 50,
-    backgroundColor: Colors.grey[300],
-    backgroundImage: (employee.profileImageUrl.isNotEmpty)
-        ? NetworkImage(employee.profileImageUrl)
-        : null,
-    child: (employee.profileImageUrl.isEmpty)
-        ? const Icon(Icons.person, size: 40, color: Colors.grey)
-        : null,
-    onBackgroundImageError: (exception, stackTrace) {
-      // Handle image loading error
-      print('Error loading profile image: $exception');
-    },
+    errorWidget: const Icon(Icons.person, size: 40, color: Colors.grey),
   ),
 ),
 
@@ -126,6 +114,9 @@ class EmployeeDetailPage extends StatelessWidget {
                   "₹${employee.salary}",
                   icon: Icons.attach_money,
                 ),
+              ]),
+              _infoCard("Auth Number", [
+                _infoRow("Auth Number", employee.authNumber, icon: Icons.numbers),
               ]),
 
               _infoCard("Address", [
