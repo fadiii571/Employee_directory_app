@@ -719,6 +719,7 @@ class _HomeState extends State<Home> {
                   );
                 },
               ),
+
               Divider(),
               ListTile(
                 leading: Icon(Icons.check_circle_outline),

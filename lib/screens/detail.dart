@@ -77,7 +77,25 @@ class EmployeeDetailPage extends StatelessWidget {
   child: CachedNetworkImageWidget.avatar(
     imageUrl: employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : null,
     radius: 50,
-    errorWidget: const Icon(Icons.person, size: 40, color: Colors.grey),
+    errorWidget: CircleAvatar(
+      radius: 50,
+      backgroundColor: Colors.blue[100],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person, size: 40, color: Colors.blue[700]),
+          SizedBox(height: 4),
+          Text(
+            'No Image',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.blue[700],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    ),
   ),
 ),
 

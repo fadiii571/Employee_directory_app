@@ -54,14 +54,12 @@ class CachedNetworkImageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // Handle null or empty URLs
     if (imageUrl == null || imageUrl!.trim().isEmpty) {
-      debugPrint('🔍 Empty image URL provided');
       return _buildErrorWidget();
     }
 
     // Clean and validate URL
     final cleanUrl = _cleanImageUrl(imageUrl!);
     if (!_isValidUrl(cleanUrl)) {
-      debugPrint('🔍 Invalid URL format: $cleanUrl');
       return _buildErrorWidget();
     }
 
@@ -72,13 +70,6 @@ class CachedNetworkImageWidget extends StatelessWidget {
       fit: fit,
       placeholder: (context, url) => _buildPlaceholder(),
       errorWidget: (context, url, error) {
-        // Enhanced error logging
-        debugPrint('🚨 Image Load Error:');
-        debugPrint('   URL: $url');
-        debugPrint('   Error: $error');
-        debugPrint('   Error Type: ${error.runtimeType}');
-
-        // Return appropriate error widget
         return _buildErrorWidget();
       },
       fadeInDuration: const Duration(milliseconds: 300),
@@ -129,11 +120,7 @@ class CachedNetworkImageWidget extends StatelessWidget {
       if (url.contains('?') && !url.contains('&token=') && !url.contains('?token=')) {
         // URL might be malformed, try to fix it
         if (url.contains('alt=media') && !url.contains('token=')) {
-          // Add token parameter if missing (though this might not work without actual token)
-          assert(() {
-            debugPrint('Warning: Firebase Storage URL missing token parameter: $url');
-            return true;
-          }());
+          // Firebase Storage URL missing token parameter
         }
       }
     }
@@ -147,25 +134,17 @@ class CachedNetworkImageWidget extends StatelessWidget {
       final uri = Uri.parse(url);
       return uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https');
     } catch (e) {
-      assert(() {
-        debugPrint('Invalid URL format: $url');
-        return true;
-      }());
       return false;
     }
   }
 
   /// Generate cache key for the image
   String _generateCacheKey(String url) {
-    // Use URL as cache key, but handle Firebase Storage URLs specially
+    // For Firebase Storage URLs, use the full URL as cache key to avoid conflicts
+    // This ensures each unique URL gets its own cache entry
     if (url.contains('firebasestorage.googleapis.com')) {
-      // Extract the file path part for consistent caching
-      final uri = Uri.parse(url);
-      final pathSegments = uri.pathSegments;
-      if (pathSegments.length >= 4) {
-        // Use bucket and file path as cache key
-        return '${pathSegments[1]}_${pathSegments[3]}';
-      }
+      // Use the full URL to ensure unique caching per image
+      return url;
     }
     return url;
   }
@@ -244,10 +223,7 @@ class ImageLoadingUtils {
         context,
       );
     } catch (e) {
-      assert(() {
-        debugPrint('Failed to preload image: $imageUrl - Error: $e');
-        return true;
-      }());
+      // Failed to preload image
     }
   }
 
@@ -255,15 +231,8 @@ class ImageLoadingUtils {
   static Future<void> clearImageCache() async {
     try {
       await DefaultCacheManager().emptyCache();
-      assert(() {
-        debugPrint('Image cache cleared successfully');
-        return true;
-      }());
     } catch (e) {
-      assert(() {
-        debugPrint('Failed to clear image cache: $e');
-        return true;
-      }());
+      // Failed to clear image cache
     }
   }
 
@@ -318,10 +287,6 @@ class ImageLoadingUtils {
       
       return url; // Return original if can't fix
     } catch (e) {
-      assert(() {
-        debugPrint('Failed to fix Firebase Storage URL: $url - Error: $e');
-        return true;
-      }());
       return null;
     }
   }

@@ -122,8 +122,10 @@ Future<String?> uploadToFirebaseStorage() async {
       fileName = pickedFile.name;
     }
 
-    // Create unique storage path
-    final String path = 'employee_images/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    // Create unique storage path with timestamp and random component
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final randomId = DateTime.now().microsecond; // Additional uniqueness
+    final String path = 'employee_images/${timestamp}_${randomId}_$fileName';
 
     // Upload to Firebase Storage
     final ref = FirebaseStorage.instance.ref().child(path);
@@ -837,20 +839,33 @@ DateTime _calculateShiftDate(DateTime now, String section) {
   // Special handling for Admin Office, KK, and Fancy (extended checkout until 6PM next day)
   if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
     if (now.hour < 16) {
-      // Before 4PM = could be extended checkout from previous day's shift OR new day
-      if (now.hour <= 18) {
-        // Before 6PM = extended checkout from previous day's shift
-        return DateTime(now.year, now.month, now.day - 1, 16);
+      // Before 4PM = extended checkout from previous day's shift
+      return DateTime(now.year, now.month, now.day - 1, 16);
+    } else if (now.hour < 18) {
+      // 4PM to 6PM = could be start of current shift OR extended checkout from previous shift
+      // We need to determine based on whether it's the same day as shift start or next day
+
+      // If it's the same day as when the shift started (4PM), it's current day's shift
+      // If it's the next day, it's extended checkout from previous day's shift
+      final currentShiftStart = DateTime(now.year, now.month, now.day, 16);
+      final previousShiftStart = DateTime(now.year, now.month, now.day - 1, 16);
+
+      // Check if we're within 26 hours of the previous shift start (4PM yesterday to 6PM today)
+      final hoursSincePreviousShift = now.difference(previousShiftStart).inHours;
+
+      if (hoursSincePreviousShift <= 26) {
+        // Within extended checkout period - belongs to previous day's shift
+        return previousShiftStart;
       } else {
-        // After 6PM = previous day's shift
-        return DateTime(now.year, now.month, now.day - 1, 16);
+        // New shift starting today
+        return currentShiftStart;
       }
     } else {
-      // 4PM or after = current day's shift
+      // 6PM or after = current day's shift (new shift starts)
       return DateTime(now.year, now.month, now.day, 16);
     }
   } else {
-    // Standard sections: 4PM to 4PM logic
+    // Standard sections: 4PM to 4PM logic (no extended checkout)
     if (now.hour < 16) {
       // Before 4PM = previous day's shift
       return DateTime(now.year, now.month, now.day - 1, 16);
@@ -861,54 +876,5 @@ DateTime _calculateShiftDate(DateTime now, String section) {
   }
 }
 
-/// Test function to demonstrate 4PM-4PM shift logic with extended checkout
-void testShiftDateCalculation() {
-  final testTime1 = DateTime(2024, 8, 6, 16, 0); // 4:00 PM Aug 6 (Check-in)
-  final testTime2 = DateTime(2024, 8, 7, 18, 0); // 6:00 PM Aug 7 (Extended checkout)
-  final testTime3 = DateTime(2024, 8, 7, 16, 0); // 4:00 PM Aug 7 (Standard checkout)
 
-  print('=== 4PM-4PM Shift Logic with Extended Checkout Test ===');
-  print('Test Time 1: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime1)} (Check-in 4PM Aug 6)');
-  print('Test Time 2: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime2)} (Extended checkout 6PM Aug 7)');
-  print('Test Time 3: ${DateFormat('yyyy-MM-dd HH:mm').format(testTime3)} (Standard checkout 4PM Aug 7)');
-  print('');
-
-  for (final section in ['Admin office', 'Fancy', 'KK', 'Other']) {
-    print('Section: $section');
-    if (section == 'Admin office' || section == 'Fancy' || section == 'KK') {
-      print('  Type: 4PM-4PM with extended checkout until 6PM next day');
-    } else {
-      print('  Type: Standard 4PM-4PM');
-    }
-    print('  4PM Aug 6 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime1, section))}');
-    print('  6PM Aug 7 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime2, section))}');
-    print('  4PM Aug 7 → ${DateFormat('yyyy-MM-dd').format(_calculateShiftDate(testTime3, section))}');
-    print('');
-  }
-}
-
-/// Test function for attendance history date generation
-Future<void> testAttendanceHistoryDates() async {
-  final startDate = DateTime(2024, 1, 15);
-  final endDate = DateTime(2024, 1, 17);
-
-  print('=== Attendance History Date Generation Test ===');
-  print('Date Range: ${DateFormat('yyyy-MM-dd').format(startDate)} to ${DateFormat('yyyy-MM-dd').format(endDate)}');
-  print('');
-
-  // Test for specific employee (Fancy section)
-  print('For Fancy Employee:');
-  final fancyDates = await _generateShiftAwareDateList(startDate, endDate, 'fancy_employee_id');
-  for (final date in fancyDates) {
-    print('  Search Date: $date');
-  }
-  print('');
-
-  // Test for all employees
-  print('For All Employees:');
-  final allDates = await _generateShiftAwareDateList(startDate, endDate, '');
-  for (final date in allDates) {
-    print('  Search Date: $date');
-  }
-}
 

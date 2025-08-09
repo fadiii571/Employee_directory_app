@@ -65,10 +65,13 @@ class _AttendanceDashboardState extends State<AttendanceDashboard> {
     });
 
     try {
-      // Get attendance records for selected date from subcollection
+      // Calculate shift-aware date following 4PM-4PM rule
+      final shiftDate = _calculateShiftDateForDashboard(selectedDateTime);
+
+      // Get attendance records for shift date from subcollection
       final attendanceSnapshot = await FirebaseFirestore.instance
           .collection('attendance')
-          .doc(selectedDate)
+          .doc(shiftDate)
           .collection('records')
           .get();
 
@@ -191,6 +194,23 @@ class _AttendanceDashboardState extends State<AttendanceDashboard> {
       };
       totalEmployees = 0;
     });
+  }
+
+  /// Calculate shift date following 4PM-4PM rule
+  /// Returns the date string (yyyy-MM-dd) for the shift that the selected date belongs to
+  String _calculateShiftDateForDashboard(DateTime selectedDate) {
+    // 4PM-4PM shift logic:
+    // - If selected time is before 4PM, it belongs to the previous day's shift
+    // - If selected time is 4PM or after, it belongs to the current day's shift
+
+    if (selectedDate.hour < 16) {
+      // Before 4PM = belongs to previous day's shift
+      final shiftStartDate = selectedDate.subtract(const Duration(days: 1));
+      return DateFormat('yyyy-MM-dd').format(shiftStartDate);
+    } else {
+      // 4PM or after = belongs to current day's shift
+      return DateFormat('yyyy-MM-dd').format(selectedDate);
+    }
   }
 
   @override

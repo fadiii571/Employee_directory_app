@@ -440,29 +440,53 @@ pw.Widget _buildColoredAttendanceTable(List<List<dynamic>> tableData) {
             final index = entry.key;
             final cellData = entry.value.toString();
 
-            // Special styling for punctuality column (index 6)
+            // Special styling for punctuality column (index 6) - TEXT COLOR ONLY
             if (index == 6) {
-              PdfColor backgroundColor = PdfColors.white;
               PdfColor textColor = PdfColors.black;
 
               switch (cellData) {
                 case 'Early':
-                  backgroundColor = PdfColors.green100;
                   textColor = PdfColors.green800;
                   break;
                 case 'On Time':
-                  backgroundColor = PdfColors.orange100;
                   textColor = PdfColors.orange800;
                   break;
                 case 'Late':
-                  backgroundColor = PdfColors.red100;
                   textColor = PdfColors.red800;
                   break;
               }
 
               return pw.Container(
                 padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(color: backgroundColor),
+                child: pw.Text(
+                  cellData,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: textColor,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              );
+            }
+
+            // Special styling for status column (index 5) - TEXT COLOR ONLY
+            if (index == 5) {
+              PdfColor textColor = PdfColors.black;
+
+              switch (cellData) {
+                case 'Complete':
+                  textColor = PdfColors.green800;
+                  break;
+                case 'In Progress':
+                  textColor = PdfColors.red800;
+                  break;
+                case 'Absent':
+                  textColor = PdfColors.red800;
+                  break;
+              }
+
+              return pw.Container(
+                padding: const pw.EdgeInsets.all(8),
                 child: pw.Text(
                   cellData,
                   style: pw.TextStyle(

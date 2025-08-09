@@ -255,19 +255,37 @@ class AttendanceService {
 
   // ==================== HELPER METHODS ====================
   
-  /// Calculate shift date using 4PM-4PM logic
-  /// 
+  /// Calculate shift date using 4PM-4PM logic with extended checkout support
+  ///
   /// Logic:
-  /// - Before 4PM: Previous day's shift
-  /// - 4PM or after: Current day's shift
-  /// - Extended sections can checkout until 6PM next day but stored under shift start date
+  /// - Standard sections: 4PM-4PM shifts
+  /// - Extended sections (Admin Office, Fancy, KK): 4PM-4PM shifts with checkout until 6PM next day
+  /// - All attendance stored under shift start date for consistency
   static DateTime _calculateShiftDate(DateTime dateTime, String section) {
-    if (dateTime.hour < 16) {
-      // Before 4PM = previous day's shift
-      return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+    // Special handling for extended checkout sections
+    if (extendedCheckoutSections.contains(section)) {
+      if (dateTime.hour < 16) {
+        // Before 4PM = could be extended checkout from previous day's shift
+        if (dateTime.hour < 18) {
+          // Before 6PM = extended checkout from previous day's shift
+          return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+        } else {
+          // 6PM or after (but before 4PM next day) = previous day's shift
+          return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+        }
+      } else {
+        // 4PM or after = current day's shift starts
+        return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
+      }
     } else {
-      // 4PM or after = current day's shift
-      return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
+      // Standard sections: 4PM to 4PM logic (no extended checkout)
+      if (dateTime.hour < 16) {
+        // Before 4PM = previous day's shift
+        return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+      } else {
+        // 4PM or after = current day's shift
+        return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
+      }
     }
   }
 

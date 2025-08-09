@@ -18,10 +18,10 @@ void main() {
 
       // Within grace period (4:03 PM)
       expect(SectionShiftHelper.calculatePunctualityStatus('16:03', 'Admin office'), 'On Time');
-
+       
       // End of grace period (4:05 PM)
       expect(SectionShiftHelper.calculatePunctualityStatus('16:10', 'Admin office'), 'On Time');
-
+      
       // Late (after 4:05 PM)
       expect(SectionShiftHelper.calculatePunctualityStatus('16:11', 'Admin office'), 'Late');
 

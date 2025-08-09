@@ -115,16 +115,29 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
     // Special handling for Admin Office, KK, and Fancy (extended checkout until 6PM next day)
     if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
       if (now.hour < 16) {
-        // Before 4PM = could be extended checkout from previous day's shift
-        if (now.hour <= 18) {
-          // Before or at 6PM = extended checkout from previous day's shift
-          return DateTime(now.year, now.month, now.day - 1, 16);
+        // Before 4PM = extended checkout from previous day's shift
+        return DateTime(now.year, now.month, now.day - 1, 16);
+      } else if (now.hour < 18) {
+        // 4PM to 6PM = could be start of current shift OR extended checkout from previous shift
+        // We need to determine based on whether it's the same day as shift start or next day
+
+        // If it's the same day as when the shift started (4PM), it's current day's shift
+        // If it's the next day, it's extended checkout from previous day's shift
+        final currentShiftStart = DateTime(now.year, now.month, now.day, 16);
+        final previousShiftStart = DateTime(now.year, now.month, now.day - 1, 16);
+
+        // Check if we're within 26 hours of the previous shift start (4PM yesterday to 6PM today)
+        final hoursSincePreviousShift = now.difference(previousShiftStart).inHours;
+
+        if (hoursSincePreviousShift <= 26) {
+          // Within extended checkout period - belongs to previous day's shift
+          return previousShiftStart;
         } else {
-          // After 6PM = previous day's shift
-          return DateTime(now.year, now.month, now.day - 1, 16);
+          // New shift starting today
+          return currentShiftStart;
         }
       } else {
-        // 4PM or after = current day's shift
+        // 6PM or after = current day's shift (new shift starts)
         return DateTime(now.year, now.month, now.day, 16);
       }
     }
