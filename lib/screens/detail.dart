@@ -72,32 +72,41 @@ class EmployeeDetailPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-          Hero(
-  tag: 'profile_${employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : employee.name}',
-  child: CachedNetworkImageWidget.avatar(
-    imageUrl: employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : null,
-    radius: 50,
-    errorWidget: CircleAvatar(
-      radius: 50,
-      backgroundColor: Colors.blue[100],
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.person, size: 40, color: Colors.blue[700]),
-          SizedBox(height: 4),
-          Text(
-            'No Image',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.blue[700],
-              fontWeight: FontWeight.w500,
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => Imageviewesc(profileImageUrl: employee.profileImageUrl),
+              ),
+            ),
+            child: Hero(
+              tag: 'profile_${employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : employee.name}',
+              child: CachedNetworkImageWidget.avatar(
+                imageUrl: employee.profileImageUrl.isNotEmpty ? employee.profileImageUrl : null,
+                radius: 50,
+                errorWidget: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.blue[100],
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+            Icon(Icons.person, size: 40, color: Colors.blue[700]),
+            SizedBox(height: 4),
+            Text(
+              'No Image',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.blue[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ],
-      ),
-    ),
-  ),
-),
 
 
               const SizedBox(height: 20),
@@ -167,26 +176,7 @@ class EmployeeDetailPage extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 4,
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) =>
-                                Imageviewesc(imageUrl: employee.imageUrl),
-                      ),
-                    );
-                  },
-                 
-                ),
-              ),
+             
               const SizedBox(height: 20),
             ],
           ),

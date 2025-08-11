@@ -35,7 +35,8 @@ class PayrollListScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text("Present: ${data['presentDays']}  |  Absent: ${data['absentDays']}"),
-                      Text("Leaves: ${data['paidLeaves']}  |  Working Days: ${data['workingDays']}"),
+                      Text("Paid Leaves: ${data['paidLeaves']}  |  Sunday Leaves: ${data['sundayLeaves'] ?? 0}"),
+                      Text("Total Leaves: ${data['totalLeaves'] ?? 0}  |  Working Days: ${data['workingDays']}"),
                     ],
                   ),
                   trailing: Column(

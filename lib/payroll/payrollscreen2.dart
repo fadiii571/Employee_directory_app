@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:student_projectry_app/Services/services.dart';
+import 'package:student_projectry_app/Services/payroll_service.dart';
 import 'package:student_projectry_app/payroll/payrolldetailsc.dart';
 import 'package:student_projectry_app/widgets/payrollpdf.dart';
 
@@ -19,7 +19,37 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
   Future<void> _generatePayroll() async {
     final monthYear = DateFormat('yyyy-MM').format(selectedMonth);
     setState(() => isGenerating = true);
-    await generatePayrollForMonth(monthYear);
+
+    try {
+      final result = await PayrollService.generatePayrollForMonth(monthYear);
+      if (mounted) {
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${result['message']} - ${result['employeesProcessed']} employees processed'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${result['message']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error generating payroll: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
     setState(() => isGenerating = false);
   }
 
@@ -374,7 +404,11 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                           Expanded(
                                             child: ElevatedButton.icon(
                                               onPressed: () async {
-                                                await updatePayrollStatus(monthYear, docs[index].id, 'Paid');
+                                                await PayrollService.updatePayrollStatus(
+                                                  monthYear: monthYear,
+                                                  employeeId: docs[index].id,
+                                                  status: 'Paid'
+                                                );
                                                 if (context.mounted) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
                                                     SnackBar(content: Text('✅ Marked ${data['name']} as Paid')),
@@ -395,7 +429,11 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                           Expanded(
                                             child: ElevatedButton.icon(
                                               onPressed: () async {
-                                                await updatePayrollStatus(monthYear, docs[index].id, 'Unpaid');
+                                                await PayrollService.updatePayrollStatus(
+                                                  monthYear: monthYear,
+                                                  employeeId: docs[index].id,
+                                                  status: 'Unpaid'
+                                                );
                                                 if (context.mounted) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
                                                     SnackBar(content: Text('❌ Marked ${data['name']} as Unpaid')),
@@ -446,7 +484,11 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                         flex: 2,
                                         child: ElevatedButton.icon(
                                           onPressed: () async {
-                                            await updatePayrollStatus(monthYear, docs[index].id, 'Paid');
+                                            await PayrollService.updatePayrollStatus(
+                                              monthYear: monthYear,
+                                              employeeId: docs[index].id,
+                                              status: 'Paid'
+                                            );
                                             if (context.mounted) {
                                               ScaffoldMessenger.of(context).showSnackBar(
                                                 SnackBar(content: Text('✅ Marked ${data['name']} as Paid')),
@@ -468,7 +510,11 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                         flex: 2,
                                         child: ElevatedButton.icon(
                                           onPressed: () async {
-                                            await updatePayrollStatus(monthYear, docs[index].id, 'Unpaid');
+                                            await PayrollService.updatePayrollStatus(
+                                              monthYear: monthYear,
+                                              employeeId: docs[index].id,
+                                              status: 'Unpaid'
+                                            );
                                             if (context.mounted) {
                                               ScaffoldMessenger.of(context).showSnackBar(
                                                 SnackBar(content: Text('❌ Marked ${data['name']} as Unpaid')),

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 class Imageviewesc extends StatelessWidget {
-  final String imageUrl;
-  const Imageviewesc({Key? key,required this.imageUrl}):super(key: key);
+  final String profileImageUrl;
+  const Imageviewesc({Key? key,required this.profileImageUrl}):super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +15,7 @@ class Imageviewesc extends StatelessWidget {
       minScale: 0.6,
       maxScale: 5.0,
        child: Center(
-        child: Image.network(imageUrl),
+        child: Image.network(profileImageUrl),
        ),
      ),
    ),

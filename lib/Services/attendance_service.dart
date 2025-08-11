@@ -259,19 +259,33 @@ class AttendanceService {
   ///
   /// Logic:
   /// - Standard sections: 4PM-4PM shifts
-  /// - Extended sections (Admin Office, Fancy, KK): 4PM-4PM shifts with checkout until 6PM next day
+  /// - Admin Office, KK: 4PM-4PM shifts with checkout until 6PM next day
+  /// - Fancy: 4PM-4PM shifts with checkout until 10PM next day
   /// - All attendance stored under shift start date for consistency
   static DateTime _calculateShiftDate(DateTime dateTime, String section) {
     // Special handling for extended checkout sections
     if (extendedCheckoutSections.contains(section)) {
       if (dateTime.hour < 16) {
         // Before 4PM = could be extended checkout from previous day's shift
-        if (dateTime.hour < 18) {
-          // Before 6PM = extended checkout from previous day's shift
-          return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+
+        if (section.toLowerCase() == 'fancy') {
+          // Fancy section: Extended checkout until 10PM next day
+          if (dateTime.hour < 22) {
+            // Before 10PM = extended checkout from previous day's shift
+            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+          } else {
+            // 10PM or after (but before 4PM next day) = previous day's shift
+            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+          }
         } else {
-          // 6PM or after (but before 4PM next day) = previous day's shift
-          return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+          // Admin Office, KK: Extended checkout until 6PM next day
+          if (dateTime.hour < 18) {
+            // Before 6PM = extended checkout from previous day's shift
+            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+          } else {
+            // 6PM or after (but before 4PM next day) = previous day's shift
+            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
+          }
         }
       } else {
         // 4PM or after = current day's shift starts
@@ -290,21 +304,37 @@ class AttendanceService {
   }
 
   /// Validate extended checkout timing
-  /// 
-  /// Extended sections (Admin Office, Fancy, KK) can checkout until 6PM next day
+  ///
+  /// Extended sections have different checkout limits:
+  /// - Admin Office, KK: Can checkout until 6PM next day
+  /// - Fancy: Can checkout until 10PM next day
   static Map<String, dynamic> _validateExtendedCheckout(DateTime now, String section) {
     if (!extendedCheckoutSections.contains(section)) {
       return {'isValid': true};
     }
 
-    // For extended sections, allow checkout until 6PM next day
     final currentShiftStart = _calculateShiftDate(now, section);
-    final maxCheckoutTime = currentShiftStart.add(const Duration(hours: 26)); // 4PM + 26 hours = 6PM next day
+
+    // Different checkout limits for different sections
+    Duration maxCheckoutDuration;
+    String maxTimeMessage;
+
+    if (section.toLowerCase() == 'fancy') {
+      // Fancy section: 4PM + 30 hours = 10PM next day
+      maxCheckoutDuration = const Duration(hours: 30);
+      maxTimeMessage = '10PM next day';
+    } else {
+      // Admin Office, KK: 4PM + 26 hours = 6PM next day
+      maxCheckoutDuration = const Duration(hours: 26);
+      maxTimeMessage = '6PM next day';
+    }
+
+    final maxCheckoutTime = currentShiftStart.add(maxCheckoutDuration);
 
     if (now.isAfter(maxCheckoutTime)) {
       return {
         'isValid': false,
-        'message': 'Checkout time exceeded. Maximum checkout time is 6PM next day.',
+        'message': 'Checkout time exceeded. Maximum checkout time is $maxTimeMessage.',
       };
     }
 

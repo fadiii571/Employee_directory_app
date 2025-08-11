@@ -157,52 +157,162 @@ Future<void> generateAttendancePdf({
 
   // Build the PDF content
   if (viewType == 'Daily') {
-    // Daily Report with Table
+    // Daily Report with Table - Grouped by Sections
     final tableData = <List<String>>[];
 
+    // Define section order for PDF display
+    final sectionOrder = [
+      'Joint', 'Fancy', 'KK', 'Admin office', 'Anchor', 'Soldering',
+      'Wire', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
+    ];
+
+    // Group employees by section
+    final Map<String, List<Map<String, dynamic>>> employeesBySection = {};
+
     for (final entry in logs) {
-      final name = entry['name'] ?? '-';
       final section = entry['section'] ?? 'Unknown';
-      final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
+      if (!employeesBySection.containsKey(section)) {
+        employeesBySection[section] = [];
+      }
+      employeesBySection[section]!.add(entry);
+    }
 
-      final checkIns = rawLogs
-          .where((e) => isCheckInType(e['type']))
-          .map((e) => formatTimeTo12Hour(e['time']))
-          .join(', ');
+    // Process sections in the specified order
+    for (final section in sectionOrder) {
+      if (employeesBySection.containsKey(section)) {
+        // Add section header row
+        tableData.add([
+          '═══ $section Section ═══',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ]);
 
-      final checkOuts = rawLogs
-          .where((e) => isCheckOutType(e['type']))
-          .map((e) => formatTimeTo12Hour(e['time']))
-          .join(', ');
+        // Sort employees within section by name
+        final sectionEmployees = employeesBySection[section]!;
+        sectionEmployees.sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
 
-      // Use the same duration calculation logic as attendance history
-      Duration workedDuration = calculatePDFDuration(rawLogs);
+        // Add employees for this section
+        for (final entry in sectionEmployees) {
+          final name = entry['name'] ?? '-';
+          final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
 
-      final status = checkIns.isNotEmpty && checkOuts.isNotEmpty ? 'Complete' :
-                    checkIns.isNotEmpty ? 'In Progress' : 'Absent';
+          final checkIns = rawLogs
+              .where((e) => isCheckInType(e['type']))
+              .map((e) => formatTimeTo12Hour(e['time']))
+              .join(', ');
 
-      // Determine punctuality status
-      String punctuality = 'Absent';
-      if (checkIns.isNotEmpty && checkIns != '-') {
-        // Find check-in log - handle different type formats
-        final firstCheckIn = rawLogs.firstWhere(
-          (e) => isCheckInType(e['type']),
-          orElse: () => {}
-        );
-        if (firstCheckIn.isNotEmpty) {
-          punctuality = getPunctualityStatus(firstCheckIn['time'], section);
+          final checkOuts = rawLogs
+              .where((e) => isCheckOutType(e['type']))
+              .map((e) => formatTimeTo12Hour(e['time']))
+              .join(', ');
+
+          // Use the same duration calculation logic as attendance history
+          Duration workedDuration = calculatePDFDuration(rawLogs);
+
+          final status = checkIns.isNotEmpty && checkOuts.isNotEmpty ? 'Complete' :
+                        checkIns.isNotEmpty ? 'In Progress' : 'Absent';
+
+          // Determine punctuality status
+          String punctuality = 'Absent';
+          if (checkIns.isNotEmpty && checkIns != '-') {
+            // Find check-in log - handle different type formats
+            final firstCheckIn = rawLogs.firstWhere(
+              (e) => isCheckInType(e['type']),
+              orElse: () => {}
+            );
+            if (firstCheckIn.isNotEmpty) {
+              punctuality = getPunctualityStatus(firstCheckIn['time'], section);
+            }
+          }
+
+          tableData.add([
+            name,
+            section,
+            checkIns.isEmpty ? '-' : checkIns,
+            checkOuts.isEmpty ? '-' : checkOuts,
+            formatDuration(workedDuration),
+            status,
+            punctuality,
+          ]);
+        }
+
+        // Add spacing after each section
+        tableData.add([
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ]);
+      }
+    }
+
+    // Add any sections not in the predefined order
+    for (final section in employeesBySection.keys) {
+      if (!sectionOrder.contains(section)) {
+        // Add section header row
+        tableData.add([
+          '═══ $section Section ═══',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ]);
+
+        // Sort employees within section by name
+        final sectionEmployees = employeesBySection[section]!;
+        sectionEmployees.sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
+
+        // Add employees for this section
+        for (final entry in sectionEmployees) {
+          final name = entry['name'] ?? '-';
+          final rawLogs = List<Map<String, dynamic>>.from(entry['logs'] ?? []);
+
+          final checkIns = rawLogs
+              .where((e) => isCheckInType(e['type']))
+              .map((e) => formatTimeTo12Hour(e['time']))
+              .join(', ');
+
+          final checkOuts = rawLogs
+              .where((e) => isCheckOutType(e['type']))
+              .map((e) => formatTimeTo12Hour(e['time']))
+              .join(', ');
+
+          Duration workedDuration = calculatePDFDuration(rawLogs);
+
+          final status = checkIns.isNotEmpty && checkOuts.isNotEmpty ? 'Complete' :
+                        checkIns.isNotEmpty ? 'In Progress' : 'Absent';
+
+          String punctuality = 'Absent';
+          if (checkIns.isNotEmpty && checkIns != '-') {
+            final firstCheckIn = rawLogs.firstWhere(
+              (e) => isCheckInType(e['type']),
+              orElse: () => {}
+            );
+            if (firstCheckIn.isNotEmpty) {
+              punctuality = getPunctualityStatus(firstCheckIn['time'], section);
+            }
+          }
+
+          tableData.add([
+            name,
+            section,
+            checkIns.isEmpty ? '-' : checkIns,
+            checkOuts.isEmpty ? '-' : checkOuts,
+            formatDuration(workedDuration),
+            status,
+            punctuality,
+          ]);
         }
       }
-
-      tableData.add([
-        name,
-        section,
-        checkIns.isEmpty ? '-' : checkIns,
-        checkOuts.isEmpty ? '-' : checkOuts,
-        formatDuration(workedDuration),
-        status,
-        punctuality, // New punctuality column
-      ]);
     }
 
     pdf.addPage(
@@ -439,6 +549,49 @@ pw.Widget _buildColoredAttendanceTable(List<List<dynamic>> tableData) {
           children: row.asMap().entries.map((entry) {
             final index = entry.key;
             final cellData = entry.value.toString();
+
+            // Check if this is a section header row
+            final isSectionHeader = cellData.startsWith('═══') && cellData.endsWith('═══');
+            final isEmptyRow = cellData.isEmpty && row.every((cell) => cell.toString().isEmpty);
+
+            // Section header styling
+            if (isSectionHeader && index == 0) {
+              return pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue100,
+                  border: pw.Border.all(color: PdfColors.blue800, width: 1),
+                ),
+                child: pw.Text(
+                  cellData,
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800,
+                  ),
+                ),
+              );
+            }
+
+            // Empty cells for section headers (columns 2-7)
+            if (isSectionHeader && index > 0) {
+              return pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue100,
+                  border: pw.Border.all(color: PdfColors.blue800, width: 1),
+                ),
+                child: pw.Text(''),
+              );
+            }
+
+            // Empty row styling (spacing between sections)
+            if (isEmptyRow) {
+              return pw.Container(
+                padding: const pw.EdgeInsets.all(4),
+                child: pw.Text(''),
+              );
+            }
 
             // Special styling for punctuality column (index 6) - TEXT COLOR ONLY
             if (index == 6) {

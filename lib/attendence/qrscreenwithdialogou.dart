@@ -108,47 +108,66 @@ class _QRScanAttendanceScreenState extends State<QRScanAttendanceScreendialogou>
   }
 
   /// Calculate shift date using 4PM-4PM logic with extended checkout for special sections
-  /// Admin Office, KK, and Fancy can checkout until 6PM next day but stored under shift start date
+  /// Admin Office, KK: checkout until 6PM next day
+  /// Fancy: checkout until 10PM next day
   DateTime _calculateShiftDate(DateTime now, String section) {
     final sectionLower = section.toLowerCase();
 
-    // Special handling for Admin Office, KK, and Fancy (extended checkout until 6PM next day)
+    // Special handling for extended checkout sections
     if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
       if (now.hour < 16) {
         // Before 4PM = extended checkout from previous day's shift
         return DateTime(now.year, now.month, now.day - 1, 16);
-      } else if (now.hour < 18) {
-        // 4PM to 6PM = could be start of current shift OR extended checkout from previous shift
-        // We need to determine based on whether it's the same day as shift start or next day
-
-        // If it's the same day as when the shift started (4PM), it's current day's shift
-        // If it's the next day, it's extended checkout from previous day's shift
-        final currentShiftStart = DateTime(now.year, now.month, now.day, 16);
-        final previousShiftStart = DateTime(now.year, now.month, now.day - 1, 16);
-
-        // Check if we're within 26 hours of the previous shift start (4PM yesterday to 6PM today)
-        final hoursSincePreviousShift = now.difference(previousShiftStart).inHours;
-
-        if (hoursSincePreviousShift <= 26) {
-          // Within extended checkout period - belongs to previous day's shift
-          return previousShiftStart;
-        } else {
-          // New shift starting today
-          return currentShiftStart;
-        }
       } else {
-        // 6PM or after = current day's shift (new shift starts)
+        // 4PM or after = need to check if it's extended checkout or new shift
+
+        if (sectionLower == 'fancy') {
+          // Fancy section: Extended checkout until 10PM next day
+          if (now.hour < 22) {
+            // Before 10PM = could be extended checkout from previous day's shift
+            final previousShiftStart = DateTime(now.year, now.month, now.day - 1, 16);
+            final hoursSincePreviousShift = now.difference(previousShiftStart).inHours;
+
+            if (hoursSincePreviousShift <= 30) {
+              // Within 30-hour extended checkout period - belongs to previous day's shift
+              return previousShiftStart;
+            } else {
+              // New shift starting today
+              return DateTime(now.year, now.month, now.day, 16);
+            }
+          } else {
+            // 10PM or after = current day's shift (new shift starts)
+            return DateTime(now.year, now.month, now.day, 16);
+          }
+        } else {
+          // Admin Office, KK: Extended checkout until 6PM next day
+          if (now.hour < 18) {
+            // Before 6PM = could be extended checkout from previous day's shift
+            final previousShiftStart = DateTime(now.year, now.month, now.day - 1, 16);
+            final hoursSincePreviousShift = now.difference(previousShiftStart).inHours;
+
+            if (hoursSincePreviousShift <= 26) {
+              // Within 26-hour extended checkout period - belongs to previous day's shift
+              return previousShiftStart;
+            } else {
+              // New shift starting today
+              return DateTime(now.year, now.month, now.day, 16);
+            }
+          } else {
+            // 6PM or after = current day's shift (new shift starts)
+            return DateTime(now.year, now.month, now.day, 16);
+          }
+        }
+      }
+    } else {
+      // Standard sections: 4PM-4PM logic (no extended checkout)
+      if (now.hour < 16) {
+        // Before 4PM = previous day's shift
+        return DateTime(now.year, now.month, now.day - 1, 16);
+      } else {
+        // 4PM or after = current day's shift
         return DateTime(now.year, now.month, now.day, 16);
       }
-    }
-
-    // Standard 4PM-4PM logic for all other sections
-    if (now.hour < 16) {
-      // Before 4PM = previous day's shift
-      return DateTime(now.year, now.month, now.day - 1, 16);
-    } else {
-      // 4PM or after = current day's shift
-      return DateTime(now.year, now.month, now.day, 16);
     }
   }
 
