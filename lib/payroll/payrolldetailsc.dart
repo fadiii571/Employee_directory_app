@@ -31,38 +31,6 @@ class PayrollDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _infoRow("Employee Name", payrollData['name']),
-                    _infoRow("Base Salary", "₹${(payrollData['baseSalary'] ?? 0).toStringAsFixed(2)}"),
-                    _infoRow("Working Days", "${payrollData['workingDays'] ?? 0} days"),
-                    _infoRow("Daily Rate", "₹${(payrollData['dailyRate'] ?? 0).toStringAsFixed(2)} (₹${(payrollData['baseSalary'] ?? 0).toStringAsFixed(0)} ÷ ${payrollData['workingDays'] ?? 0})"),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Attendance Information Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Attendance Summary",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[800],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _infoRow("Working Days", payrollData['workingDays'].toString()),
-                    _infoRow("Present Days", payrollData['presentDays'].toString()),
-                    _infoRow("Paid Leaves", payrollData['paidLeaves'].toString()),
-                    _infoRow("Sunday Leaves", (payrollData['sundayLeaves'] ?? 0).toString()),
-                    _infoRow("Total Leaves", (payrollData['totalLeaves'] ?? 0).toString()),
-                    _infoRow("Absent Days", payrollData['absentDays'].toString()),
                   ],
                 ),
               ),
@@ -87,7 +55,7 @@ class PayrollDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _infoRow("Base Salary", "₹${(payrollData['baseSalary'] ?? 0).toStringAsFixed(2)}"),
-                    _infoRow("Deduction", "₹${(payrollData['deduction'] ?? 0).toStringAsFixed(2)}"),
+                    _infoRow("Advance Salary", "₹${(payrollData['advanceSalary'] ?? 0).toStringAsFixed(2)}"),
                     const Divider(),
                     _infoRow(
                       "Final Salary",
@@ -126,11 +94,7 @@ class PayrollDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      "• Working Days = Calendar Days - Sundays\n"
-                      "• Sundays = Automatic leave days\n"
-                      "• Absent Days = Working Days - Present - Paid Leaves\n"
-                      "• Daily Rate = Base Salary ÷ Working Days\n"
-                      "• Final Salary = Base Salary - (Daily Rate × Absent Days)",
+                      "• Final Salary = Base Salary - Advance Salary",
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.blue[600],

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf;
+import 'package:student_projectry_app/widgets/generatepdf.dart' show generateAttendancePdf, generateEmployeeAttendancePdf;
 import 'package:student_projectry_app/Services/services.dart';
+import 'package:student_projectry_app/Services/employee_service.dart';
 
 class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
   const EmployeeQRDailyLogHistoryScreen({super.key});
@@ -14,17 +15,135 @@ class EmployeeQRDailyLogHistoryScreen extends StatefulWidget {
 class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHistoryScreen> {
   DateTime selectedDate = DateTime.now();
   String selectedSection = '';
+  String selectedEmployee = '';
   String viewType = 'Daily';
   List<Map<String, dynamic>> currentVisibleLogs = [];
+  List<Map<String, dynamic>> allEmployees = [];
   bool _isInitialized = false;
 
   // Available sections for filter
   final List<String> availableSections = [
     'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
+    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
   ];
 
   String get formattedDate => DateFormat('yyyy-MM-dd').format(selectedDate);
+
+  /// Get employees filtered by selected section
+  List<Map<String, dynamic>> getFilteredEmployees() {
+    if (selectedSection.isEmpty) {
+      return allEmployees;
+    }
+    return allEmployees.where((employee) =>
+      employee['section'] == selectedSection
+    ).toList();
+  }
+
+  /// Get selected employee name
+  String getSelectedEmployeeName() {
+    if (selectedEmployee.isEmpty) return '';
+    final employee = allEmployees.firstWhere(
+      (emp) => emp['id'] == selectedEmployee,
+      orElse: () => {'name': 'Unknown Employee'},
+    );
+    return employee['name'] ?? 'Unknown Employee';
+  }
+
+  /// Get selected employee section
+  String getSelectedEmployeeSection() {
+    if (selectedEmployee.isEmpty) return '';
+    final employee = allEmployees.firstWhere(
+      (emp) => emp['id'] == selectedEmployee,
+      orElse: () => {'section': 'Unknown Section'},
+    );
+    return employee['section'] ?? 'Unknown Section';
+  }
+
+  /// Generate PDF report for selected employee
+  Future<void> _generateEmployeePdf(List<Map<String, dynamic>> logs) async {
+    if (selectedEmployee.isEmpty || logs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No employee selected or no attendance data available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // The `logs` variable already contains the correct data structure.
+      // We just need to ensure it's sorted and the date range is correct.
+      final attendanceData = List<Map<String, dynamic>>.from(logs);
+
+      if (attendanceData.isEmpty) {
+        throw Exception('No valid attendance records found for the selected employee');
+      }
+
+      // Sort by date
+      attendanceData.sort((a, b) {
+        try {
+          final dateA = DateTime.parse(a['date']);
+          final dateB = DateTime.parse(b['date']);
+          return dateA.compareTo(dateB);
+        } catch (e) {
+          return 0;
+        }
+      });
+
+      // Generate date range string
+      String dateRange = 'Unknown Period';
+      if (attendanceData.isNotEmpty) {
+        try {
+          final firstDate = attendanceData.first['date'];
+          final lastDate = attendanceData.last['date'];
+
+          if (firstDate == lastDate) {
+            dateRange = DateFormat('MMMM dd, yyyy').format(DateTime.parse(firstDate));
+          } else {
+            dateRange = '${DateFormat('MMM dd').format(DateTime.parse(firstDate))} - ${DateFormat('MMM dd, yyyy').format(DateTime.parse(lastDate))}';
+          }
+        } catch (e) {
+          dateRange = 'Invalid Date Range';
+        }
+      }
+
+      // Validate employee data
+      final employeeName = getSelectedEmployeeName();
+      final employeeSection = getSelectedEmployeeSection();
+
+      if (employeeName.isEmpty || employeeName == 'Unknown Employee') {
+        throw Exception('Employee information not available');
+      }
+
+      // Generate PDF
+      await generateEmployeeAttendancePdf(
+        employeeName: employeeName,
+        employeeSection: employeeSection,
+        attendanceData: attendanceData,
+        dateRange: dateRange,
+        viewType: viewType,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF report generated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -37,12 +156,18 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
     if (!_isInitialized) {
       try {
         await preloadEmployeeData();
+
+        // Load all employees for the filter dropdown (including those without isActive field)
+        final employees = await EmployeeService.getAllEmployeesWithStatus();
+
         setState(() {
+          allEmployees = employees;
           _isInitialized = true;
         });
-        debugPrint('✅ Employee data preloaded for attendance history');
       } catch (e) {
-        debugPrint('❌ Error preloading employee data: $e');
+        setState(() {
+          _isInitialized = true; // Set to true even on error to prevent infinite loading
+        });
       }
     }
   }
@@ -291,64 +416,128 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
-                // View Type Dropdown
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.calendar_view_day, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: viewType,
-                        underline: const SizedBox(),
-                        items: ['Daily', 'Weekly', 'Monthly']
-                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => viewType = val);
-                        },
+                // First row: View Type and Section Filter
+                Row(
+                  children: [
+                    // View Type Dropdown
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_view_day, size: 18, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButton<String>(
+                                value: viewType,
+                                underline: const SizedBox(),
+                                isExpanded: true,
+                                items: ['Daily', 'Weekly', 'Monthly']
+                                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                                    .toList(),
+                                onChanged: (val) {
+                                  if (val != null) setState(() => viewType = val);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Section Filter Dropdown
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.business, size: 18, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButton<String>(
+                                value: selectedSection.isNotEmpty ? selectedSection : '',
+                                underline: const SizedBox(),
+                                isExpanded: true,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text("All Sections", style: TextStyle(fontWeight: FontWeight.w500))
+                                  ),
+                                  ...availableSections
+                                      .map((section) => DropdownMenuItem(value: section, child: Text(section))),
+                                ],
+                                onChanged: (val) {
+                                  setState(() {
+                                    selectedSection = val ?? '';
+                                    // Reset employee filter when section changes
+                                    selectedEmployee = '';
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                // Section Filter Dropdown
+                const SizedBox(height: 12),
+                // Second row: Employee Filter
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey.shade300),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.business, size: 16, color: Colors.grey),
+                      const Icon(Icons.person, size: 18, color: Colors.grey),
                       const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: selectedSection.isNotEmpty ? selectedSection : '',
-                        underline: const SizedBox(),
-                        items: [
-                          const DropdownMenuItem(
-                            value: '',
-                            child: Text("All Sections", style: TextStyle(fontWeight: FontWeight.w500))
-                          ),
-                          ...availableSections
-                              .map((section) => DropdownMenuItem(value: section, child: Text(section))),
-                        ],
-                        onChanged: (val) {
-                          setState(() {
-                            selectedSection = val ?? '';
-                          });
-                        },
+                      Expanded(
+                        child: _isInitialized
+                          ? DropdownButton<String>(
+                              value: selectedEmployee.isNotEmpty &&
+                                     getFilteredEmployees().any((emp) => emp['id'] == selectedEmployee)
+                                     ? selectedEmployee : '',
+                              underline: const SizedBox(),
+                              isExpanded: true,
+                              items: [
+                                const DropdownMenuItem(
+                                  value: '',
+                                  child: Text("All Employees", style: TextStyle(fontWeight: FontWeight.w500))
+                                ),
+                                // Only show employee items if we have employees
+                                if (getFilteredEmployees().isNotEmpty)
+                                  ...getFilteredEmployees()
+                                      .map((employee) => DropdownMenuItem(
+                                        value: employee['id'] ?? '',
+                                        child: Text("${employee['name'] ?? 'Unknown'} (${employee['section'] ?? 'Unknown'})")
+                                      )),
+                              ],
+                              onChanged: (val) {
+                                setState(() {
+                                  selectedEmployee = val ?? '';
+                                });
+                              },
+                            )
+                          : const Text(
+                              "Loading employees...",
+                              style: TextStyle(color: Colors.grey),
+                            ),
                       ),
                     ],
                   ),
@@ -356,6 +545,33 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
               ],
             ),
           ),
+
+          // Show message when no employees are available
+          if (_isInitialized && allEmployees.isEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                border: Border.all(color: Colors.orange.shade200),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange.shade600, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "No employees found. Please add employees first.",
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Filter Status Indicator
           if (selectedSection.isNotEmpty)
             Container(
@@ -400,7 +616,7 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
               future: fetchAttendanceHistory(
                 selectedDate: selectedDate,
                 viewType: viewType,
-                selectedEmployeeId: '',
+                selectedEmployeeId: selectedEmployee,
                 employeeNames: {},
                 selectedSection: selectedSection,
               ),
@@ -442,6 +658,119 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
 
                 return ListView(
                   children: [
+                    // Employee Summary Card (when specific employee is selected)
+                    if (selectedEmployee.isNotEmpty) ...[
+                      Container(
+                        margin: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.blue.shade50, Colors.blue.shade100],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.person, color: Colors.blue.shade700),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Employee Summary',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        getSelectedEmployeeName(),
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        getSelectedEmployeeSection(),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.green.shade300),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        formatDuration(summaryMap.values.fold(Duration.zero, (a, b) => a + b)),
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade700,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Total Hours',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.green.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${currentVisibleLogs.length} attendance record(s) found',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () => _generateEmployeePdf(currentVisibleLogs),
+                                  icon: const Icon(Icons.picture_as_pdf, size: 16),
+                                  label: const Text('PDF Report'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red.shade600,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     for (final date in sortedDates)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,29 +801,32 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                             final logs = List<Map<String, dynamic>>.from(record['logs']);
                             final totalDuration = calculateTotalDuration(logs);
 
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundImage: _getProfileImageUrl(record).isNotEmpty
-                                    ? NetworkImage(_getProfileImageUrl(record))
-                                    : null,
-                                child: _getProfileImageUrl(record).isEmpty
-                                    ? Text(_getEmployeeName(record)[0])
-                                    : null,
-                              ),
-                              title: Text(_getEmployeeName(record)),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 12,
-                                        height: 12,
-                                        decoration: BoxDecoration(
-                                          color: getSectionColor(record['section'] ?? 'Unknown'),
-                                          shape: BoxShape.circle,
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundImage: _getProfileImageUrl(record).isNotEmpty
+                                      ? NetworkImage(_getProfileImageUrl(record))
+                                      : null,
+                                  child: _getProfileImageUrl(record).isEmpty
+                                      ? Text(_getEmployeeName(record)[0])
+                                      : null,
+                                ),
+                                title: Text(_getEmployeeName(record)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: getSectionColor(record['section'] ?? 'Unknown'),
+                                            shape: BoxShape.circle,
+                                          ),
                                         ),
-                                      ),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Section: ${record['section'] ?? 'Unknown'}',
@@ -531,7 +863,8 @@ class _EmployeeQRDailyLogHistoryScreenState extends State<EmployeeQRDailyLogHist
                                   ),
                                 ],
                               ),
-                            );
+                            ),
+                          );
                           }),
                         ],
                       ),

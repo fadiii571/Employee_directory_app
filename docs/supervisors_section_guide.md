@@ -37,12 +37,7 @@ const List<String> AVAILABLE_SECTIONS = [
 ),
 ```
 
-### **2. Special Attendance Service**
-Created `SupervisorAttendanceService` with:
-- **Calendar date storage** instead of shift dates
-- **9AM-9PM work validation**
-- **Flexible check-in/check-out windows**
-- **Integration with existing systems**
+
 
 ### **3. Modified Attendance Logic**
 ```dart

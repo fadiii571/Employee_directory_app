@@ -30,11 +30,10 @@ import 'employee_service.dart';
 /// Standard sections available in the system
 const List<String> AVAILABLE_SECTIONS = [
   'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-  'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
+  'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
 ];
 
-/// Fixed working days per month for payroll calculations
-const int FIXED_WORKING_DAYS_PER_MONTH = 30;
+
 
 // ==================== CACHE MANAGEMENT ====================
 
@@ -229,40 +228,7 @@ Future<void> markQRAttendance(String employeeId, String type) async {
   final empData = empDoc.data()!;
   final section = empData['section'] ?? '';
 
-  // Handle Supervisors section differently (9AM-9PM calendar dates)
-  if (section.toLowerCase() == 'supervisors') {
-    // For supervisors, use calendar date instead of shift date
-    final calendarDate = DateTime(now.year, now.month, now.day);
-    final date = DateFormat('yyyy-MM-dd').format(calendarDate);
-
-    final recordRef = FirebaseFirestore.instance
-        .collection('attendance')
-        .doc(date)
-        .collection('records')
-        .doc(employeeId);
-
-    final snapshot = await recordRef.get();
-
-    if (snapshot.exists) {
-      await recordRef.update({
-        'logs': FieldValue.arrayUnion([
-          {'time': time, 'type': type}
-        ])
-      });
-    } else {
-      await recordRef.set({
-        'name': empData['name'],
-        'id': employeeId,
-        'section': section,
-        'workSchedule': '9AM-9PM',
-        'profileImageUrl': empData['profileImageUrl'],
-        'logs': [
-          {'time': time, 'type': type}
-        ]
-      });
-    }
-    return;
-  }
+  
 
   // Calculate shift-aware working date based on section (for non-supervisor sections)
   DateTime shiftDate = _calculateShiftDate(now, section);
@@ -369,7 +335,7 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
  Future<Map<String, List<Map<String, dynamic>>>> fetchAttendanceHistory({
   required DateTime selectedDate,
   required String viewType,
-  required String selectedEmployeeId, // Keep for compatibility but not used
+  required String selectedEmployeeId, // Filter by specific employee ID
   required Map<String, String> employeeNames, // Keep for compatibility but not used
   String selectedSection = '',
 }) async {
@@ -467,6 +433,11 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
         continue;
       }
 
+      // Apply employee filter if specified
+      if (selectedEmployeeId.isNotEmpty && employeeId != selectedEmployeeId) {
+        continue;
+      }
+
       final logs = List<Map<String, dynamic>>.from(data['logs'] ?? []);
 
       // ✅ Type-safe fallback for missing check-in/out logs
@@ -488,6 +459,7 @@ Future<List<Map<String, dynamic>>> getQRDailyAttendance({
       }
 
       dayRecords.add({
+        'date': date,
         'name': employeeName,
         'section': employeeSection,
         'profileImageUrl': profileImageUrl,
@@ -574,183 +546,11 @@ String _formatDuration(Duration duration) {
   return '${hours}h ${minutes}m';
 }
 
-Future<void> generatePayrollForMonth(String monthYear) async {
-  final _firestore = FirebaseFirestore.instance;
 
-  final employeeSnapshot = await _firestore.collection('Employees').get();
-  final year = int.parse(monthYear.split('-')[0]);
-  final month = int.parse(monthYear.split('-')[1]);
 
-  // ✅ FIXED: Use 30 working days for every month
-  const int fixedWorkingDays = 30;
 
-  for (final employeeDoc in employeeSnapshot.docs) {
-    final emp = employeeDoc.data();
-    final empId = employeeDoc.id;
 
-    final salary = double.tryParse(emp['salary'].toString()) ?? 0.0;
 
-    // Get attendance and paid leave counts for the month
-    int presentDays = await _getMonthlyAttendanceCount(_firestore, empId, year, month);
-    int paidLeaves = await _getMonthlyPaidLeaveCount(_firestore, empId, year, month);
-
-    // Calculate based on fixed 30-day working month
-    final absentDays = fixedWorkingDays - presentDays - paidLeaves;
-    final dailyRate = salary / fixedWorkingDays; // Always divide by 30
-    final deduction = dailyRate * absentDays;
-    final finalSalary = salary - deduction;
-
-    await _firestore
-        .collection('payroll')
-        .doc(monthYear)
-        .collection('Employees')
-        .doc(empId)
-        .set({
-      'employeeId': empId,
-      'name': emp['name'] ?? '',
-      'baseSalary': salary,
-      'presentDays': presentDays,
-      'paidLeaves': paidLeaves,
-      'absentDays': absentDays,
-      'workingDays': fixedWorkingDays, // Always 30
-      'deduction': deduction,
-      'finalSalary': finalSalary,
-      'status': 'Unpaid',
-      'generatedAt': FieldValue.serverTimestamp(),
-    });
-
-    print(
-        '✅ Generated payroll for ${emp['name']} — Final Salary: ₹${finalSalary.toStringAsFixed(2)}');
-  }
-}
-
-/// Helper function to count attendance days for a specific month
-Future<int> _getMonthlyAttendanceCount(FirebaseFirestore firestore, String employeeId, int year, int month) async {
-  int attendanceCount = 0;
-  final totalDaysInMonth = DateUtils.getDaysInMonth(year, month);
-
-  for (int day = 1; day <= totalDaysInMonth; day++) {
-    final date = DateTime(year, month, day);
-    final shiftStart = DateTime(date.year, date.month, date.day, 16);
-    final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
-
-    final attendanceDoc = await firestore
-        .collection('attendance')
-        .doc(formatted)
-        .collection('records')
-        .doc(employeeId)
-        .get();
-
-    if (attendanceDoc.exists) {
-      final logs = List.from(attendanceDoc.data()?['logs'] ?? []);
-      final hasCheckIn = logs.any((log) => log['type'] == 'In');
-
-      if (hasCheckIn) {
-        attendanceCount++;
-      }
-    }
-  }
-
-  return attendanceCount;
-}
-
-/// Helper function to count paid leave days for a specific month
-Future<int> _getMonthlyPaidLeaveCount(FirebaseFirestore firestore, String employeeId, int year, int month) async {
-  int paidLeaveCount = 0;
-  final totalDaysInMonth = DateUtils.getDaysInMonth(year, month);
-
-  for (int day = 1; day <= totalDaysInMonth; day++) {
-    final date = DateTime(year, month, day);
-    final shiftStart = DateTime(date.year, date.month, date.day, 16);
-    final formatted = DateFormat('yyyy-MM-dd').format(shiftStart);
-
-    final paidLeaveDoc = await firestore
-        .collection('paid_leaves')
-        .doc(formatted)
-        .collection('Employees')
-        .doc(employeeId)
-        .get();
-
-    if (paidLeaveDoc.exists) {
-      paidLeaveCount++;
-    }
-  }
-
-  return paidLeaveCount;
-}
-
-/// Update payroll payment status (Paid/Unpaid)
-Future<void> updatePayrollStatus(String monthYear, String employeeId, String status) async {
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-  await firestore
-      .collection('payroll')
-      .doc(monthYear)
-      .collection('Employees')
-      .doc(employeeId)
-      .update({
-    'status': status,
-    'statusUpdatedAt': FieldValue.serverTimestamp(),
-  });
-}
-
-Future<void> markPaidLeave(String employeeId, DateTime date, String reason) async {
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-  // Align with 4PM shift-based day
-  DateTime shiftDate = get4PMShiftDate(date);
-
-  final formatted = DateFormat('yyyy-MM-dd').format(shiftDate);
-   final empDoc = await firestore.collection('Employees').doc(employeeId).get();
-  final employeeName = empDoc.data()?['name'] ?? 'Unknown';
-  await firestore
-      .collection('paid_leaves')
-      .doc(formatted)
-      .collection('Employees')
-      .doc(employeeId)
-      .set({
-    'reason': reason,
-    'markedAt': FieldValue.serverTimestamp(),
-    'employeename':employeeName
-  });
-}
-
-Future<List<Map<String, dynamic>>> fetchPaidLeaveHistory({
-  required DateTime startDate,
-  required DateTime endDate,
-}) async {
-  List<Map<String, dynamic>> history = [];
-
-  final days = endDate.difference(startDate).inDays;
-  for (int i = 0; i <= days; i++) {
-    final date = startDate.add(Duration(days: i));
-    final formattedDate = DateFormat('yyyy-MM-dd').format(date);
-
-    final leaveSnapshot = await FirebaseFirestore.instance
-        .collection('paid_leaves')
-        .doc(formattedDate)
-        .collection('Employees')
-        .get();
-
-    for (var doc in leaveSnapshot.docs) {
-      final empId = doc.id;
-      final data = doc.data();
-
-      // Fetch employee name (optional, if not stored in leave doc)
-      final empDoc = await FirebaseFirestore.instance.collection('Employees').doc(empId).get();
-      final empName = empDoc.data()?['name'] ?? 'Unknown';
-
-      history.add({
-        'employeeId': empId,
-        'employeeName': empName,
-        'date': formattedDate,
-        'reason': data['reason'] ?? '',
-      });
-    }
-  }
-
-  return history;
-}
 
 
 

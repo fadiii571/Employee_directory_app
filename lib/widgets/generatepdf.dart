@@ -1,8 +1,440 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:student_projectry_app/Services/section_shift_helper.dart';
+
+// Helper functions for PDF generation
+DateTime? _parseTimeForDuration(String timeStr) {
+  if (timeStr.isEmpty) return null;
+
+  final formats = [
+    DateFormat('hh:mm a'),
+    DateFormat('HH:mm'),
+    DateFormat('h:mm a'),
+    DateFormat('H:mm'),
+  ];
+
+  for (final format in formats) {
+    try {
+      final parsedTime = format.parse(timeStr);
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day, parsedTime.hour, parsedTime.minute);
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+
+String _formatTimeForPdf(dynamic timeValue) {
+  if (timeValue == null) return '-';
+  final timeStr = timeValue.toString().trim();
+  if (timeStr.isEmpty) return '-';
+
+  try {
+    final formats = [
+      DateFormat('hh:mm a'),
+      DateFormat('HH:mm'),
+      DateFormat('h:mm a'),
+      DateFormat('H:mm'),
+    ];
+
+    for (final format in formats) {
+      try {
+        final parsedTime = format.parse(timeStr);
+        return DateFormat('hh:mm a').format(parsedTime);
+      } catch (e) {
+        continue;
+      }
+    }
+    return timeStr;
+  } catch (e) {
+    return timeStr;
+  }
+}
+
+String _calculateDurationForPdf(dynamic checkIn, dynamic checkOut) {
+  if (checkIn == null || checkOut == null) return '-';
+
+  try {
+    final checkInTime = _parseTimeForDuration(checkIn.toString());
+    final checkOutTime = _parseTimeForDuration(checkOut.toString());
+
+    if (checkInTime != null && checkOutTime != null) {
+      Duration duration = checkOutTime.difference(checkInTime);
+      if (duration.isNegative) {
+        // Handle next day checkout
+        duration = duration + const Duration(days: 1);
+      }
+
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes % 60;
+      return '${hours}h ${minutes}m';
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+
+  return '-';
+}
+
+/// Generate PDF report for individual employee attendance
+Future<void> generateEmployeeAttendancePdf({
+  required String employeeName,
+  required String employeeSection,
+  required List<Map<String, dynamic>> attendanceData,
+  required String dateRange,
+  required String viewType, // 'Daily', 'Weekly', 'Monthly'
+}) async {
+  try {
+    debugPrint('🔄 Starting PDF generation...');
+    debugPrint('   - Employee: $employeeName');
+    debugPrint('   - Section: $employeeSection');
+    debugPrint('   - Date Range: $dateRange');
+    debugPrint('   - View Type: $viewType');
+    debugPrint('   - Attendance Data: ${attendanceData.length} records');
+
+    final pdf = pw.Document();
+
+    // Calculate total hours worked
+    Duration totalDuration = Duration.zero;
+    int totalDays = 0;
+
+    for (final record in attendanceData) {
+      final logs = List<Map<String, dynamic>>.from(record['logs'] ?? []);
+      final checkIns = logs.where((log) {
+        final type = log['type']?.toString().toLowerCase().trim();
+        return type == 'check in' || type == 'in' || type == 'checkin';
+      }).toList();
+      final checkOuts = logs.where((log) {
+        final type = log['type']?.toString().toLowerCase().trim();
+        return type == 'check out' || type == 'out' || type == 'checkout';
+      }).toList();
+
+      if (checkIns.isNotEmpty) {
+        totalDays++;
+
+        if (checkIns.isNotEmpty && checkOuts.isNotEmpty) {
+          final checkInTime = _parseTimeForDuration(checkIns.first['time']?.toString() ?? '');
+          final checkOutTime = _parseTimeForDuration(checkOuts.last['time']?.toString() ?? '');
+
+          if (checkInTime != null && checkOutTime != null) {
+            Duration dayDuration = checkOutTime.difference(checkInTime);
+            if (dayDuration.isNegative) {
+              dayDuration = dayDuration + const Duration(days: 1);
+            }
+            totalDuration += dayDuration;
+          }
+        }
+      }
+    }
+
+  final totalHours = totalDuration.inHours;
+  final totalMinutes = totalDuration.inMinutes % 60;
+
+  debugPrint('📊 PDF Stats: $totalDays days, ${totalHours}h ${totalMinutes}m total');
+  debugPrint('🔄 Creating PDF page...');
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (pw.Context context) {
+        return [
+          // Header
+          pw.Container(
+            padding: const pw.EdgeInsets.only(bottom: 20),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 2, color: PdfColors.blue)),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Employee Attendance Report',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue900,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'Generated on ${DateFormat('MMMM dd, yyyy \'at\' hh:mm a').format(DateTime.now())}',
+                  style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 20),
+
+          // Employee Information
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blue50,
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.blue200),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Employee Information',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue900,
+                  ),
+                ),
+                pw.SizedBox(height: 12),
+                pw.Row(
+                  children: [
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Name: $employeeName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('Section: $employeeSection', style: const pw.TextStyle(fontSize: 12)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('Period: $dateRange', style: const pw.TextStyle(fontSize: 12)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('View Type: $viewType', style: const pw.TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.green100,
+                        borderRadius: pw.BorderRadius.circular(8),
+                        border: pw.Border.all(color: PdfColors.green300),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            '${totalHours}h ${totalMinutes}m',
+                            style: pw.TextStyle(
+                              fontSize: 16,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.green800,
+                            ),
+                          ),
+                          pw.Text(
+                            'Total Hours',
+                            style: pw.TextStyle(fontSize: 10, color: PdfColors.green700),
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            '$totalDays Days',
+                            style: pw.TextStyle(fontSize: 12, color: PdfColors.green700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 20),
+
+          // Attendance Table
+          pw.Text(
+            'Daily Attendance Records',
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blue900,
+            ),
+          ),
+
+          pw.SizedBox(height: 12),
+
+          // Table
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2), // Date
+              1: const pw.FlexColumnWidth(2), // Check In
+              2: const pw.FlexColumnWidth(2), // Check Out
+              3: const pw.FlexColumnWidth(1.5), // Duration
+              4: const pw.FlexColumnWidth(1.5), // Status
+            },
+            children: [
+              // Header row
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.blue100),
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text(
+                      'Date',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text(
+                      'Check In',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text(
+                      'Check Out',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text(
+                      'Duration',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text(
+                      'Status',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Data rows
+              ...attendanceData.map((record) {
+                final logs = List<Map<String, dynamic>>.from(record['logs'] ?? []);
+
+                // Handle different log structures
+                final checkIns = logs.where((log) {
+                  final type = log['type']?.toString().toLowerCase().trim();
+                  return type == 'check in' || type == 'in' || type == 'checkin';
+                }).toList();
+                final checkOuts = logs.where((log) {
+                  final type = log['type']?.toString().toLowerCase().trim();
+                  return type == 'check out' || type == 'out' || type == 'checkout';
+                }).toList();
+
+                final checkInTime = checkIns.isNotEmpty ? _formatTimeForPdf(checkIns.first['time']) : '-';
+                final checkOutTime = checkOuts.isNotEmpty ? _formatTimeForPdf(checkOuts.last['time']) : '-';
+                final duration = _calculateDurationForPdf(
+                  checkIns.isNotEmpty ? checkIns.first['time'] : null,
+                  checkOuts.isNotEmpty ? checkOuts.last['time'] : null,
+                );
+
+                String status = 'Absent';
+                if (checkIns.isNotEmpty && checkOuts.isNotEmpty) {
+                  status = 'Completed';
+                } else if (checkIns.isNotEmpty) {
+                  status = 'In Progress';
+                }
+
+                final date = record['date'] ?? 'Unknown';
+                final formattedDate = date != 'Unknown'
+                  ? DateFormat('EEE, MMM dd').format(DateTime.parse(date))
+                  : 'Unknown';
+
+                return pw.TableRow(
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(formattedDate),
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        checkInTime,
+                        style: pw.TextStyle(
+                          color: checkInTime != '-' ? PdfColors.green700 : PdfColors.grey600,
+                        ),
+                      ),
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        checkOutTime,
+                        style: pw.TextStyle(
+                          color: checkOutTime != '-' ? PdfColors.red700 : PdfColors.grey600,
+                        ),
+                      ),
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(duration),
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text(
+                        status,
+                        style: pw.TextStyle(
+                          color: status == 'Completed'
+                            ? PdfColors.green700
+                            : status == 'In Progress'
+                              ? PdfColors.orange700
+                              : PdfColors.red700,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ),
+
+          pw.SizedBox(height: 20),
+
+          // Summary
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.grey300),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Summary',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue900,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text('Total Working Days: $totalDays'),
+                pw.Text('Total Hours Worked: ${totalHours}h ${totalMinutes}m'),
+                pw.Text('Average Hours per Day: ${totalDays > 0 ? (totalDuration.inMinutes / totalDays / 60).toStringAsFixed(1) : '0.0'}h'),
+              ],
+            ),
+          ),
+        ];
+      },
+    ),
+  );
+
+    // Show print preview
+    debugPrint('🔄 Showing PDF preview...');
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: '${employeeName}_Attendance_Report_${DateFormat('yyyy_MM_dd').format(DateTime.now())}.pdf',
+    );
+    debugPrint('✅ PDF preview completed');
+  } catch (e) {
+    // Re-throw the error to be handled by the calling function
+    throw Exception('Failed to generate PDF: $e');
+  }
+}
 
 
 Future<void> generateAttendancePdf({

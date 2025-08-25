@@ -7,8 +7,9 @@ import 'package:student_projectry_app/attendence/employeeattendancehistory.dart.
 import 'package:student_projectry_app/attendence/qrscreenwithdialogou.dart';
 import 'package:student_projectry_app/model/Employeedetails.dart';
 import 'package:student_projectry_app/Services/services.dart';
-import 'package:student_projectry_app/payroll/markpaidleave.dart';
-import 'package:student_projectry_app/payroll/paidleavehistory.dart';
+import 'package:student_projectry_app/payroll/advance_history_screen.dart';
+import 'package:student_projectry_app/payroll/advance_salary_screen.dart';
+
 import 'package:student_projectry_app/screens/detail.dart';
 
 import 'package:student_projectry_app/payroll/payrollscreen2.dart';
@@ -645,7 +646,7 @@ class _HomeState extends State<Home> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          centerTitle: false, // This aligns the title to the left
+          centerTitle: false, 
           title: Text(
             "Employees",
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -765,24 +766,32 @@ class _HomeState extends State<Home> {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.markunread_mailbox_sharp),
-                title: Text('Mark Paid Leave'),
+                leading: Icon(Icons.money),
+                title: Text("Give Advance Salary"),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => MarkPaidLeaveScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => AdvanceSalaryScreen(),
+                    ),
                   );
                 },
               ),
               ListTile(
-                leading: Icon(Icons.history_rounded),
-                title: Text("Paid leave history"),
+                leading: Icon(Icons.history),
+                title: Text("Advance History"),
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) =>PaidLeaveHistoryScreen() ,));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AdvanceHistoryScreen(),
+                    ),
+                  );
                 },
               ),
+              
               Divider(),
             ],
           ),

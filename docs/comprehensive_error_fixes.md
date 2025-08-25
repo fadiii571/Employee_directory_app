@@ -26,7 +26,7 @@ RenderSemanticsAnnotations object was given an infinite size during layout
 #### **Problem:** Multiple files still had unsafe type casting
 **Files Fixed:**
 - `lib/Services/kpi_service.dart`
-- `lib/Services/supervisor_attendance_service.dart`
+
 - `lib/Services/services.dart`
 
 #### **Before (Unsafe):**
@@ -213,7 +213,7 @@ Expanded(
 - ✅ **Fixed unsafe type casting**
 - ✅ **Safe string conversion**
 
-### **3. lib/Services/supervisor_attendance_service.dart**
+
 - ✅ **Fixed unsafe type casting**
 - ✅ **Safe string conversion**
 

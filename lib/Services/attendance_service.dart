@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'supervisor_attendance_service.dart';
+
 
 
 /// Attendance Management Service
@@ -63,17 +63,7 @@ class AttendanceService {
     required double longitude,
   }) async {
     try {
-      // Handle Supervisors section differently (9AM-9PM calendar dates)
-      if (section.toLowerCase() == 'supervisors') {
-        return await SupervisorAttendanceService.markSupervisorAttendance(
-          employeeId: employeeId,
-          employeeName: employeeName,
-          type: type,
-          location: location,
-          latitude: latitude,
-          longitude: longitude,
-        );
-      }
+      
 
       final now = DateTime.now();
       final timeString = DateFormat('HH:mm').format(now);

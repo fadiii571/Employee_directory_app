@@ -4,19 +4,16 @@ import 'package:intl/intl.dart';
 /// Payroll Management Service
 ///
 /// This service handles all payroll-related operations:
-/// - Monthly payroll generation with DYNAMIC working days (Calendar Days - Sundays)
-/// - Attendance-based salary calculations
-/// - Paid leave management
-/// - Sunday leave management (automatic)
-/// - Payroll status tracking (Paid/Unpaid)
-/// - Performance optimizations for frequent generation
+/// - Monthly payroll generation with a fixed salary.
+/// - Advance salary deductions.
+/// - Payroll status tracking (Paid/Unpaid).
+/// - Performance optimizations for frequent generation.
 ///
 /// Key Features:
-/// - DYNAMIC working days per month (Calendar Days - Sundays, e.g., Aug 2025 = 26 days)
-/// - Admin-managed paid leave system
-/// - Sunday shift leave policy (Sunday shifts = automatic leave, no attendance credit)
-/// - Automatic deduction calculations
-/// - Batch processing for efficiency
+/// - Fixed monthly salary calculation.
+/// - Admin-managed advance salary system.
+/// - Automatic deduction of advances from the final salary.
+/// - Batch processing for efficiency.
 class PayrollService {
   
   // ==================== CONSTANTS ====================
@@ -24,18 +21,7 @@ class PayrollService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _payrollCollection = 'payroll';
   static const String _employeesCollection = 'Employees';
-  static const String _attendanceCollection = 'attendance';
-  static const String _paidLeaveCollection = 'paid_leave';
-  
-  /// Calculate working days per month dynamically
-  ///
-  /// Working days = Calendar days in month - Sundays in month
-  /// This ensures accurate payroll calculations based on actual working days.
-  static int getWorkingDaysInMonth(int year, int month) {
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final sundaysInMonth = _getSundaysInMonth(year, month);
-    return daysInMonth - sundaysInMonth;
-  }
+  static const String _advancesCollection = 'advances';
 
   // ==================== CACHE MANAGEMENT ====================
   
@@ -54,9 +40,7 @@ class PayrollService {
   /// This is the main function for generating monthly payroll.
   /// It processes all employees and calculates their final salary based on:
   /// - Base salary
-  /// - Attendance days (check-ins only)
-  /// - Paid leave days
-  /// - DYNAMIC working days (Calendar Days - Sundays, varies by month)
+  /// - Total advance salary taken during the month
   /// 
   /// Parameters:
   /// - monthYear: Format 'YYYY-MM' (e.g., '2024-01')
@@ -64,10 +48,6 @@ class PayrollService {
   /// Returns: Future<Map<String, dynamic>> - Generation result with statistics
   static Future<Map<String, dynamic>> generatePayrollForMonth(String monthYear) async {
     try {
-      final year = int.parse(monthYear.split('-')[0]);
-      final month = int.parse(monthYear.split('-')[1]);
-
-      // Get all active employees
       final employeeSnapshot = await _firestore
           .collection(_employeesCollection)
           .where('isActive', isEqualTo: true)
@@ -86,7 +66,6 @@ class PayrollService {
       double totalPayroll = 0.0;
       final List<String> errors = [];
 
-      // Process each employee
       for (final employeeDoc in employeeSnapshot.docs) {
         try {
           final emp = employeeDoc.data();
@@ -99,30 +78,28 @@ class PayrollService {
             continue;
           }
 
-          // Get attendance and paid leave counts for the month
-          final presentDays = await _getMonthlyAttendanceCount(empId, year, month);
-          final paidLeaves = await _getMonthlyPaidLeaveCount(empId, year, month);
-          final sundayLeaves = _getSundaysInMonth(year, month);
+          // Get total advance for the month
+          final totalAdvance = await _getMonthlyAdvanceTotal(empId, monthYear);
 
-          // Calculate payroll based on dynamic working days with Sunday leaves
-          final workingDays = getWorkingDaysInMonth(year, month);
-          final payrollData = _calculatePayroll(
-            baseSalary: salary,
-            presentDays: presentDays,
-            paidLeaves: paidLeaves,
-            sundayLeaves: sundayLeaves,
-            workingDays: workingDays,
-          );
+          final finalSalary = salary - totalAdvance;
 
-          // Save payroll record
-          await _savePayrollRecord(
-            monthYear: monthYear,
-            employeeId: empId,
-            employeeData: emp,
-            payrollData: payrollData,
-          );
+          await _firestore
+              .collection(_payrollCollection)
+              .doc(monthYear)
+              .collection('Employees')
+              .doc(empId)
+              .set({
+            'employeeId': empId,
+            'name': emp['name'] ?? '',
+            'baseSalary': salary,
+            'advanceSalary': totalAdvance,
+            'finalSalary': finalSalary,
+            'status': 'Unpaid',
+            'generatedAt': FieldValue.serverTimestamp(),
+            'monthYear': monthYear,
+          });
 
-          totalPayroll += payrollData['finalSalary'];
+          totalPayroll += finalSalary;
           successCount++;
 
         } catch (e) {
@@ -244,7 +221,7 @@ class PayrollService {
       int paidCount = 0;
       int unpaidCount = 0;
       double totalPaidAmount = 0.0;
-      double totalUnpaidAmount = 0.0;
+      double totalUnpaidAmount = .0;
 
       for (final record in records) {
         final status = record['status'] ?? 'Unpaid';
@@ -281,247 +258,22 @@ class PayrollService {
   }
 
   // ==================== HELPER METHODS ====================
-  
-  /// Calculate payroll based on attendance and paid leave
-  ///
-  /// Uses dynamic working days calculation with Sunday shift leave logic:
-  ///
-  /// LOGIC:
-  /// - Working Days = Calendar Days - Sundays (e.g., Aug 2025: 31 - 5 = 26)
-  /// - Sunday Shifts = Automatic leave days (NO attendance credit even if employee works)
-  /// - Present Days = Only from non-Sunday shifts (Sunday shifts don't count)
-  /// - Absent Days = Working Days - Present Days - Paid Leaves
-  /// - Daily Rate = Base Salary ÷ Working Days
-  /// - Deduction = Daily Rate × Absent Days
-  /// - Final Salary = Base Salary - Deduction
-  ///
-  /// EXAMPLE (August 2025 - 26 working days):
-  /// - Present: 20 (from non-Sunday shifts only), Paid Leaves: 2, Sunday Shifts: 5 (automatic leave)
-  /// - Absent: 26 - 20 - 2 = 4 days
-  /// - Deduction: Only for 4 absent days (Sunday shifts treated as automatic leave)
-  static Map<String, dynamic> _calculatePayroll({
-    required double baseSalary,
-    required int presentDays,
-    required int paidLeaves,
-    required int sundayLeaves,
-    required int workingDays,
-  }) {
-    // IMPORTANT: workingDays already excludes Sundays (Calendar Days - Sundays)
-    // So we only need to subtract present days and paid leaves from working days
 
-    final totalLeaves = paidLeaves + sundayLeaves; // For display purposes
-    final absentDays = workingDays - presentDays - paidLeaves; // Actual absent working days
-    final dailyRate = baseSalary / workingDays; // Rate based on working days (excludes Sundays)
-    final deduction = dailyRate * (absentDays > 0 ? absentDays : 0); // Only deduct for absent working days
-    final finalSalary = baseSalary - deduction;
+  /// Get monthly advance total for an employee
+  static Future<double> _getMonthlyAdvanceTotal(String employeeId, String monthYear) async {
+    double totalAdvance = 0.0;
 
-    return {
-      'baseSalary': baseSalary,
-      'presentDays': presentDays,
-      'paidLeaves': paidLeaves,
-      'sundayLeaves': sundayLeaves,
-      'totalLeaves': totalLeaves,
-      'absentDays': absentDays > 0 ? absentDays : 0,
-      'workingDays': workingDays, // This should show 26 for August 2025, not 30
-      'dailyRate': dailyRate,
-      'deduction': deduction,
-      'finalSalary': finalSalary,
-    };
-  }
+    final advanceSnapshot = await _firestore
+        .collection(_advancesCollection)
+        .where('employeeId', isEqualTo: employeeId)
+        .where('monthYear', isEqualTo: monthYear)
+        .get();
 
-  /// Save payroll record to Firestore
-  static Future<void> _savePayrollRecord({
-    required String monthYear,
-    required String employeeId,
-    required Map<String, dynamic> employeeData,
-    required Map<String, dynamic> payrollData,
-  }) async {
-    await _firestore
-        .collection(_payrollCollection)
-        .doc(monthYear)
-        .collection('Employees')
-        .doc(employeeId)
-        .set({
-      'employeeId': employeeId,
-      'name': employeeData['name'] ?? '',
-      'section': employeeData['section'] ?? '',
-      'salary': employeeData['salary'] ?? '', // Include employee salary
-      'baseSalary': payrollData['baseSalary'],
-      'presentDays': payrollData['presentDays'],
-      'paidLeaves': payrollData['paidLeaves'],
-      'sundayLeaves': payrollData['sundayLeaves'],
-      'totalLeaves': payrollData['totalLeaves'],
-      'absentDays': payrollData['absentDays'],
-      'workingDays': payrollData['workingDays'],
-      'dailyRate': payrollData['dailyRate'],
-      'deduction': payrollData['deduction'],
-      'finalSalary': payrollData['finalSalary'],
-      'status': 'Unpaid',
-      'generatedAt': FieldValue.serverTimestamp(),
-      'monthYear': monthYear,
-    });
-  }
-
-  /// Get monthly attendance count for an employee
-  ///
-  /// This function uses shift date logic with Sunday shift leave policy:
-  /// - Uses 4PM-4PM shift logic to match your attendance system
-  /// - Sunday shifts are treated as automatic leave days (no attendance credit)
-  /// - Only non-Sunday shifts can contribute to present days count
-  static Future<int> _getMonthlyAttendanceCount(String employeeId, int year, int month) async {
-    try {
-      int presentDays = 0;
-      final Set<String> processedShiftDates = {}; // Avoid counting same shift twice
-
-      // Get employee data to determine section for shift calculation
-      String employeeSection = '';
-      try {
-        final employeeDoc = await _firestore
-            .collection(_employeesCollection)
-            .doc(employeeId)
-            .get();
-        if (employeeDoc.exists) {
-          employeeSection = employeeDoc.data()!['section'] ?? '';
-        }
-      } catch (e) {
-        // Continue with empty section if employee data fetch fails
-      }
-
-      // Generate all dates in the month and check for attendance
-      final daysInMonth = DateTime(year, month + 1, 0).day;
-
-      for (int day = 1; day <= daysInMonth; day++) {
-        final date = DateTime(year, month, day);
-
-        // Calculate shift date using the same logic as your attendance system
-        final shiftDate = _calculateShiftDateForPayroll(date, employeeSection);
-        final shiftDateString = DateFormat('yyyy-MM-dd').format(shiftDate);
-
-        // Skip if we already processed this shift date
-        if (processedShiftDates.contains(shiftDateString)) {
-          continue;
-        }
-        processedShiftDates.add(shiftDateString);
-
-        // Apply Sunday shift leave logic
-        // If the shift date is a Sunday, treat it as automatic leave (no attendance credit)
-        if (shiftDate.weekday == DateTime.sunday) {
-          // Sunday shift = automatic leave day, skip attendance check
-          continue;
-        }
-
-        // Check if employee has attendance record for this shift date (non-Sunday shifts only)
-        final attendanceDoc = await _firestore
-            .collection(_attendanceCollection)
-            .doc(shiftDateString)
-            .collection('records')
-            .doc(employeeId)
-            .get();
-
-        if (attendanceDoc.exists) {
-          final logs = List<Map<String, dynamic>>.from(attendanceDoc.data()!['logs'] ?? []);
-
-          // Check if there's a check-in log (only check-ins count for payroll)
-          final hasCheckIn = logs.any((log) => log['type'] == 'Check In');
-          if (hasCheckIn) {
-            presentDays++;
-          }
-        }
-      }
-
-      return presentDays;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  /// Calculate shift date for payroll (matches your attendance system logic)
-  ///
-  /// This uses the same 4PM-4PM shift logic as your attendance system
-  /// with extended checkout support for special sections:
-  /// - Admin Office, KK: Extended checkout until 6PM next day
-  /// - Fancy: Extended checkout until 10PM next day
-  static DateTime _calculateShiftDateForPayroll(DateTime dateTime, String section) {
-    final sectionLower = section.toLowerCase();
-
-    // Special handling for extended checkout sections
-    if (sectionLower == 'admin office' || sectionLower == 'kk' || sectionLower == 'fancy') {
-      if (dateTime.hour < 16) {
-        // Before 4PM = could be extended checkout from previous day's shift
-
-        if (sectionLower == 'fancy') {
-          // Fancy section: Extended checkout until 10PM next day
-          if (dateTime.hour < 22) {
-            // Before 10PM = extended checkout from previous day's shift
-            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
-          } else {
-            // 10PM or after (but before 4PM next day) = previous day's shift
-            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
-          }
-        } else {
-          // Admin Office, KK: Extended checkout until 6PM next day
-          if (dateTime.hour < 18) {
-            // Before 6PM = extended checkout from previous day's shift
-            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
-          } else {
-            // 6PM or after (but before 4PM next day) = previous day's shift
-            return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
-          }
-        }
-      } else {
-        // 4PM or after = current day's shift starts
-        return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
-      }
-    } else {
-      // Standard sections: 4PM to 4PM logic (no extended checkout)
-      if (dateTime.hour < 16) {
-        // Before 4PM = previous day's shift
-        return DateTime(dateTime.year, dateTime.month, dateTime.day - 1, 16);
-      } else {
-        // 4PM or after = current day's shift
-        return DateTime(dateTime.year, dateTime.month, dateTime.day, 16);
-      }
-    }
-  }
-
-  /// Count the number of Sundays in a given month
-  ///
-  /// Parameters:
-  /// - year: Year (e.g., 2024)
-  /// - month: Month (1-12)
-  ///
-  /// Returns: int - Number of Sundays in the month
-  static int _getSundaysInMonth(int year, int month) {
-    int sundayCount = 0;
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-
-    for (int day = 1; day <= daysInMonth; day++) {
-      final date = DateTime(year, month, day);
-      if (date.weekday == DateTime.sunday) {
-        sundayCount++;
-      }
+    for (final doc in advanceSnapshot.docs) {
+      totalAdvance += (doc.data()['amount'] as num).toDouble();
     }
 
-    return sundayCount;
-  }
-
-  /// Get monthly paid leave count for an employee
-  static Future<int> _getMonthlyPaidLeaveCount(String employeeId, int year, int month) async {
-    try {
-      final startDate = DateTime(year, month, 1);
-      final endDate = DateTime(year, month + 1, 0);
-      
-      final snapshot = await _firestore
-          .collection(_paidLeaveCollection)
-          .where('employeeId', isEqualTo: employeeId)
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .get();
-
-      return snapshot.docs.length;
-    } catch (e) {
-      return 0;
-    }
+    return totalAdvance;
   }
 
   /// Check if payroll exists for a month
@@ -563,6 +315,68 @@ class PayrollService {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  static Future<void> giveAdvanceSalary({
+    required String employeeId,
+    required String employeeName,
+    required double amount,
+    required DateTime date,
+  }) async {
+    final monthYear = DateFormat('yyyy-MM').format(date);
+
+    await _firestore.collection(_advancesCollection).add({
+      'employeeId': employeeId,
+      'employeeName': employeeName,
+      'amount': amount,
+      'date': Timestamp.fromDate(date),
+      'monthYear': monthYear,
+    });
+
+    // After adding the advance, recalculate and update the employee's payroll for the month
+    await _recalculateAndSaveEmployeePayroll(employeeId, monthYear);
+  }
+
+  /// Recalculates and saves an employee's payroll for a specific month.
+  /// This is called when an advance is given or if an employee's salary changes.
+  static Future<void> _recalculateAndSaveEmployeePayroll(String employeeId, String monthYear) async {
+    try {
+      final employeeDoc = await _firestore.collection(_employeesCollection).doc(employeeId).get();
+      if (!employeeDoc.exists) {
+        print('Employee $employeeId not found for payroll recalculation.');
+        return;
+      }
+
+      final empData = employeeDoc.data();
+      final baseSalary = double.tryParse(empData?['salary'].toString() ?? '0.0') ?? 0.0;
+      final empName = empData?['name'] ?? 'Unknown';
+
+      final totalAdvance = await _getMonthlyAdvanceTotal(employeeId, monthYear);
+      final finalSalary = baseSalary - totalAdvance;
+
+      await _firestore
+          .collection(_payrollCollection)
+          .doc(monthYear)
+          .collection('Employees')
+          .doc(employeeId)
+          .set({
+        'employeeId': employeeId,
+        'name': empName,
+        'baseSalary': baseSalary,
+        'advanceSalary': totalAdvance,
+        'finalSalary': finalSalary,
+        'status': 'Unpaid', // Default to Unpaid on recalculation, or preserve if already Paid
+        'generatedAt': FieldValue.serverTimestamp(), // Update timestamp
+        'monthYear': monthYear,
+      }, SetOptions(merge: true)); // Use merge to update existing fields without overwriting others
+
+      // Clear cache to ensure fresh data is fetched next time
+      clearCache();
+
+      print('Payroll for $empName ($employeeId) in $monthYear recalculated and updated.');
+    } catch (e) {
+      print('Error recalculating payroll for employee $employeeId in $monthYear: $e');
     }
   }
 }

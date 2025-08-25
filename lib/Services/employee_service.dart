@@ -21,7 +21,7 @@ class EmployeeService {
   /// Available sections in the system
   static const List<String> availableSections = [
     'Admin office', 'Anchor', 'Fancy', 'KK', 'Soldering',
-    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish', 'Supervisors'
+    'Wire', 'Joint', 'V chain', 'Cutting', 'Box chain', 'Polish'
   ];
 
   // ==================== CACHE MANAGEMENT ====================
@@ -169,11 +169,11 @@ class EmployeeService {
   }
 
   /// Delete an employee (soft delete by setting isActive to false)
-  /// 
+  ///
   /// Parameters:
   /// - id: Employee document ID
   /// - context: BuildContext for showing messages (optional)
-  /// 
+  ///
   /// Returns: Future<bool> - true if successful, false otherwise
   static Future<bool> deleteEmployee({
     required String id,
@@ -192,27 +192,117 @@ class EmployeeService {
 
       // Show success message
       if (context != null && context.mounted) {
-        _showSuccessMessage(context, "Employee deleted successfully");
+        _showSuccessMessage(context, "Employee set to inactive successfully");
       }
 
       return true;
     } catch (e) {
       // Show error message
       if (context != null && context.mounted) {
-        _showErrorMessage(context, 'Error deleting employee: ${e.toString()}');
+        _showErrorMessage(context, 'Error updating employee status: ${e.toString()}');
+      }
+      return false;
+    }
+  }
+
+  /// Toggle employee active status
+  ///
+  /// Parameters:
+  /// - id: Employee document ID
+  /// - isActive: New active status
+  /// - context: BuildContext for showing messages (optional)
+  ///
+  /// Returns: Future<bool> - true if successful, false otherwise
+  static Future<bool> toggleEmployeeStatus({
+    required String id,
+    required bool isActive,
+    BuildContext? context,
+  }) async {
+    try {
+      final updateData = {
+        'isActive': isActive,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Add appropriate timestamp based on status
+      if (isActive) {
+        updateData['reactivatedAt'] = FieldValue.serverTimestamp();
+      } else {
+        updateData['deactivatedAt'] = FieldValue.serverTimestamp();
+      }
+
+      await _firestore.collection(_employeesCollection).doc(id).update(updateData);
+
+      // Clear cache
+      clearCache();
+
+      // Show success message
+      if (context != null && context.mounted) {
+        final statusText = isActive ? "activated" : "deactivated";
+        _showSuccessMessage(context, "Employee $statusText successfully");
+      }
+
+      return true;
+    } catch (e) {
+      // Show error message
+      if (context != null && context.mounted) {
+        _showErrorMessage(context, 'Error updating employee status: ${e.toString()}');
       }
       return false;
     }
   }
 
   /// Get all active employees
-  /// 
+  ///
   /// Returns: Future<List<Map<String, dynamic>>> - List of employee data
   static Future<List<Map<String, dynamic>>> getAllEmployees() async {
     try {
       final snapshot = await _firestore
           .collection(_employeesCollection)
           .where('isActive', isEqualTo: true)
+          .orderBy('name')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Get all employees (both active and inactive) for management purposes
+  ///
+  /// Returns: Future<List<Map<String, dynamic>>> - List of all employee data
+  static Future<List<Map<String, dynamic>>> getAllEmployeesWithStatus() async {
+    try {
+      final snapshot = await _firestore
+          .collection(_employeesCollection)
+          .orderBy('name')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        // Ensure isActive field exists (for backward compatibility)
+        data['isActive'] = data['isActive'] ?? true;
+        return data;
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Get only inactive employees
+  ///
+  /// Returns: Future<List<Map<String, dynamic>>> - List of inactive employee data
+  static Future<List<Map<String, dynamic>>> getInactiveEmployees() async {
+    try {
+      final snapshot = await _firestore
+          .collection(_employeesCollection)
+          .where('isActive', isEqualTo: false)
           .orderBy('name')
           .get();
 

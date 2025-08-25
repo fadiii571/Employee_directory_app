@@ -322,7 +322,7 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        "Present: ${data['presentDays']}/30 | Leaves: ${data['paidLeaves']} | Absent: ${data['absentDays']}",
+                                        "Base: ${data['baseSalary']} | Advance: ${data['advanceSalary']}",
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey[600],
@@ -349,7 +349,7 @@ class _GenerateAndViewPayrollScreenState extends State<GenerateAndViewPayrollScr
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              "Present: ${data['presentDays']}/30 | Leaves: ${data['paidLeaves']} | Absent: ${data['absentDays']}",
+                                              "Base: ${data['baseSalary']} | Advance: ${data['advanceSalary']} | Final: ${data['finalSalary']}",
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.grey[600],

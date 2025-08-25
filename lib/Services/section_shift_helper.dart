@@ -81,12 +81,7 @@ class SectionShiftHelper {
       'earlyWindowMinutes': 15,
       'description': '9:00 AM check-in (Early: 8:45-8:59 AM, On Time: 9:00-9:05 AM, Late: after 9:05 AM)'
     },
-    'Supervisors': {
-      'checkInTime': '09:00',
-      'gracePeriodMinutes': 5,
-      'earlyWindowMinutes': 15,
-      'description': '9:00 AM check-in (Early: 8:45-8:59 AM, On Time: 9:00-9:05 AM, Late: after 9:05 AM)'
-    },
+    
   };
 
   // ==================== PUNCTUALITY CALCULATION METHODS ====================
